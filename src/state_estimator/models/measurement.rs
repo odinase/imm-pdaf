@@ -5,6 +5,14 @@ pub struct CartesianPosition {
     sigma_p: f64,
 }
 
+impl CartesianPosition {
+    pub fn new(sigma_p: f64) -> Self {
+        CartesianPosition {
+            sigma_p,
+        }
+    }
+}
+
 impl MeasurementModel for CartesianPosition {
     type State = DVector<f64>;
     type Measurement = DVector<f64>;

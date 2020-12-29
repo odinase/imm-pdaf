@@ -1,5 +1,6 @@
 use super::models::{DynamicModel, MeasurementModel};
-use super::{StateEstimator, Consistency};
+use super::StateEstimator;
+use crate::consistency::Consistency;
 use nalgebra::{DVector, DMatrix};
 use std::f64::consts::TAU as _2_PI;
 
@@ -10,12 +11,9 @@ pub struct GaussParams {
 
 impl GaussParams {
     fn set(self, x: DVector<f64>, P: DMatrix<f64>) -> Self {
-        self = GaussParams {x, P};
-        self
+        GaussParams {x, P}
     }
-}
 
-impl GaussParams {
     pub fn new(x: DVector<f64>, P: DMatrix<f64>) -> Self {
         GaussParams {
             x,
@@ -42,10 +40,10 @@ where
     type Measurement = DVector<f64>;
 
     fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
-        let x = eststate.x;
-        let P = eststate.P;
-        let F = self.dynmod.F(&x, ts);
-        let Q = self.dynmod.Q(&x, ts);
+        let x = &eststate.x;
+        let P = &eststate.P;
+        let F = &self.dynmod.F(&x, ts);
+        let Q = &self.dynmod.Q(&x, ts);
         
         let x = self.dynmod.f(&x, ts);
         let P = F * P * F.transpose() + Q;
@@ -57,17 +55,17 @@ where
 
         let (v, S) = self.innovation(&eststate, &z);
         
-        let x = eststate.x;
-        let P = eststate.P;
+        let x = &eststate.x;
+        let P = &eststate.P;
         let n = x.len();
-        let H = self.measmod.H(&x);
-        let R = self.measmod.R(&x, &z);
+        let H = &self.measmod.H(&x);
+        let R = &self.measmod.R(&x, &z);
 
         // Kalman gain. S should be PSD, or else we fucked up
-        let W = S.cholesky().expect("S not PSD").solve(&(H*P)).transpose();
+        let W = &(S.cholesky().expect("S not PSD").solve(&(H*P)).transpose());
 
         let I = DMatrix::identity(n, n);
-        let Jo = I - W*H;
+        let Jo = &(I - W*H);
 
         let P = Jo*P*Jo.transpose() + W*R*W.transpose();
         let x = x + W*v;
@@ -87,7 +85,7 @@ where
     }
 
     fn loglikelihood(&self, z: &Self::Measurement, eststate: &Self::Params) -> f64 {
-        let nis = self.NIS(eststate);
+        let nis = self.NIS(eststate, z);
         let S = self.innovation_cov(eststate, z);
         let c = (_2_PI*S).determinant();
         let llh = -0.5*(c + nis);
@@ -118,10 +116,10 @@ K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = 
 
     fn NEES(&self,eststate: &Self::Params, x_gt: &Self::GroundTruth) -> f64 {
         let x = &eststate.x;
-        let P = &eststate.P;
+        let P = eststate.P.clone();
         let x_err = x - x_gt;
-        let P_inv_x_err = P.cholesky().expect("P not PSD??").solve(&x_err);
-        let nees = x_err.dot(&P_inv_x_err);
+        let P_inv_x_err = &(P.cholesky().expect("P not PSD??").solve(&x_err));
+        let nees = x_err.dot(P_inv_x_err);
         nees
     }
 }
@@ -132,6 +130,12 @@ where
 D: DynamicModel<State=DVector<f64>, Jacobian=DMatrix<f64>, Covariance=DMatrix<f64>>,
 M: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = DVector<f64>>,
 {
+    pub fn init(dynmod: D, measmod: M) -> Self {
+        EKF {
+            dynmod,
+            measmod,
+        }
+    }
     pub fn innovation(&self, eststate: &GaussParams, z: &DVector<f64>) -> (DVector<f64>, DMatrix<f64>) {
         let v = self.innovation_mean(eststate, z);
         let S = self.innovation_cov(eststate, z);
@@ -147,10 +151,136 @@ M: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = 
 
     fn innovation_cov(&self, eststate: &GaussParams, z: &DVector<f64>) -> DMatrix<f64> {
         let x = &eststate.x;
-        let H = self.measmod.H(x);
-        let P = eststate.P;
-        let R = self.measmod.R(x, z);
+        let H = &self.measmod.H(x);
+        let P = &eststate.P;
+        let R = &self.measmod.R(x, z);
         let S = H * P * H.transpose() + R;
         S
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state_estimator::models::{DynamicModel, MeasurementModel};
+    use crate::state_estimator::models::dynamic::CT;
+    use crate::state_estimator::models::measurement::CartesianPosition;
+
+
+    static SIGMA_A_CV: f64 = 0.5;
+    static SIGMA_A_CT: f64 = 0.5;
+    static SIGMA_OMEGA: f64 = 0.3;
+    static SIGMA_Z: f64 = 10.0;
+    static TS: f64 = 0.1;
+
+    #[test]
+    fn test_ekf_ct_predict() {
+        let x = DVector::from_row_slice(&[0.,  0.,  1.,  1.,  0.1]);
+        let P = DMatrix::from_row_slice(5, 5, &[
+            1000000.,         0.,         0.,         0.,         0.,
+            0.,   1000000.,         0.,         0.,         0.,
+            0.,         0.,       900.,         0.,         0.,
+            0.,         0.,         0.,       900.,         0.,
+            0.,         0.,         0.,         0.,         0.01
+        ]);
+        let z = DVector::from_row_slice(&[1.0, 0.0]);
+
+        let measmod = CartesianPosition::new(SIGMA_Z);
+        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+
+        let ekf = EKF::init(dynmod, measmod);
+
+        let ekfstate = GaussParams::new(x, P);
+
+        let ekfstate = ekf.predict(ekfstate, TS);
+        let x_correct = DVector::from_row_slice(&[0.09949834, 0.10049833, 0.98995017, 1.00994983, 0.1]);
+        let P_correct = DMatrix::from_row_slice(5, 5, &[
+            1000009.00000859, -0.00000025, 89.99975509, 0.44999127, -0.00005033,
+            -0.00000025, 1000009.00000858, -0.45000127, 89.99975492, 0.00004967,
+            89.99975509, -0.45000127, 900.025102, -0.00009998, -0.00100995,
+            0.44999127, 89.99975492, -0.00009998, 900.025098, 0.00098995,
+            -0.00005033, 0.00004967, -0.00100995, 0.00098995, 0.019
+        ]);
+        // println!("\nx_correct: {}\nP_correct: {}\n", x_correct, P_correct);
+        // println!("\nx_pred: {}\nP_pred: {}\n", ekfstate.x, ekfstate.P);
+        // println!("\nP_correct.shape() = {:#?}", P_correct.shape());
+        // println!("\nekf.state.P.shape() = {:#?}", ekfstate.P.shape());
+        assert!(ekfstate.x.len() == 5, "x.len() = {}", ekfstate.x.len());
+        assert!(ekfstate.P.shape() == (5, 5), "P.shape() = {:#?}", ekfstate.P.shape());
+        assert!(x_correct.relative_eq(&ekfstate.x, 1e-5, 1e-5));
+        assert!(P_correct.relative_eq(&ekfstate.P, 1e-5, 1e-5));
+    }
+
+    fn test_ekf_ct_update() {
+        let x = DVector::from_row_slice(&[0.09949834, 0.10049833, 0.98995017, 1.00994983, 0.1]);
+        let P = DMatrix::from_row_slice(5, 5, &[
+            1000009.00000859, -0.00000025, 89.99975509, 0.44999127, -0.00005033,
+            -0.00000025, 1000009.00000858, -0.45000127, 89.99975492, 0.00004967,
+            89.99975509, -0.45000127, 900.025102, -0.00009998, -0.00100995,
+            0.44999127, 89.99975492, -0.00009998, 900.025098, 0.00098995,
+            -0.00005033, 0.00004967, -0.00100995, 0.00098995, 0.019
+        ]);
+        let z = DVector::from_row_slice(&[1.0, 0.0]);
+
+        let measmod = CartesianPosition::new(SIGMA_Z);
+        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+
+        let ekf = EKF::init(dynmod, measmod);
+
+        let ekfstate = GaussParams::new(x, P);
+        let ekfstate = ekf.update(z, ekfstate);
+
+        let x_correct = DVector::from_row_slice(&[0.99990996, 0.00001005, 0.99003125, 1.0099412, 0.1]);
+        let P_correct = DMatrix::from_row_slice(5, 5, &[
+            99.99000109, -0., 0.00899899, 0.00004499, -0.00000001,
+            -0., 99.99000109, -0.000045, 0.00899899, 0.,
+            0.00899899, -0.000045, 900.01700272, -0.00009998, -0.00100995,
+            0.00004499, 0.00899899, -0.00009998, 900.01699872, 0.00098995,
+            -0.00000001, 0., -0.00100995, 0.00098995, 0.019
+        ]);
+
+        assert!(ekfstate.x.len() == 5, "x.len() = {}", ekfstate.x.len());
+        assert!(ekfstate.P.shape() == (5, 5), "P.shape() = {:#?}", ekfstate.P.shape());
+        assert!(x_correct.relative_eq(&ekfstate.x, 1e-5, 1e-5));
+        assert!(P_correct.relative_eq(&ekfstate.P, 1e-5, 1e-5));
+    }
+
+    fn test_ekf_ct_step() {
+        let x = DVector::from_row_slice(&[0.,  0.,  1.,  1.,  0.1]);
+        let P = DMatrix::from_row_slice(5, 5, &[
+            1000000.,         0.,         0.,         0.,         0.,
+            0.,   1000000.,         0.,         0.,         0.,
+            0.,         0.,       900.,         0.,         0.,
+            0.,         0.,         0.,       900.,         0.,
+            0.,         0.,         0.,         0.,         0.01
+        ]);
+        let z = DVector::from_row_slice(&[1.0, 0.0]);
+
+        let measmod = CartesianPosition::new(SIGMA_Z);
+        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+
+        let ekf = EKF::init(dynmod, measmod);
+
+        let ekfstate = GaussParams::new(x, P);
+
+        let ekfstate = ekf.step(z, ekfstate, TS);
+
+        let x_correct = DVector::from_row_slice(&[0.99990996, 0.00001005, 0.99003125, 1.0099412, 0.1]);
+        let P_correct = DMatrix::from_row_slice(5, 5, &[
+            99.99000109, -0., 0.00899899, 0.00004499, -0.00000001,
+            -0., 99.99000109, -0.000045, 0.00899899, 0.,
+            0.00899899, -0.000045, 900.01700272, -0.00009998, -0.00100995,
+            0.00004499, 0.00899899, -0.00009998, 900.01699872, 0.00098995,
+            -0.00000001, 0., -0.00100995, 0.00098995, 0.019
+        ]);
+        // println!("\nx_correct: {}\nP_correct: {}\n", x_correct, P_correct);
+        // println!("\nx_pred: {}\nP_pred: {}\n", ekfstate.x, ekfstate.P);
+        // println!("\nP_correct.shape() = {:#?}", P_correct.shape());
+        // println!("\nekf.state.P.shape() = {:#?}", ekfstate.P.shape());
+        assert!(ekfstate.x.len() == 5, "x.len() = {}", ekfstate.x.len());
+        assert!(ekfstate.P.shape() == (5, 5), "P.shape() = {:#?}", ekfstate.P.shape());
+        assert!(x_correct.relative_eq(&ekfstate.x, 1e-5, 1e-5));
+        assert!(P_correct.relative_eq(&ekfstate.P, 1e-5, 1e-5));
     }
 }
