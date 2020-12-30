@@ -27,11 +27,11 @@ impl MeasurementModel for CartesianPosition {
     }
     fn H(&self, x: &Self::State) -> Self::Jacobian {
         let n = x.len();
-        let H = DMatrix::zeros(2, n);
+        let H = DMatrix::identity(2, n);
         H
     }
     fn R(&self, x: &Self::State, z: &Self::Measurement) -> Self::Covariance {
-        let n = x.len();
+        let n = z.len();
         let R = DMatrix::<f64>::identity(n,n)*self.sigma_p.powi(2);
         R
     }
