@@ -3,11 +3,6 @@ pub mod state_estimator;
 pub mod consistency;
 pub mod mixture;
 
-pub mod yoyo {
-    pub fn testy() {
-        println!("testst");
-    }
-}
 
 #[cfg(test)]
 mod tests {
