@@ -1,17 +1,26 @@
-use matfile::NumericData;
+#![allow(non_snake_case)]
+use matfile;
 use nalgebra::{DMatrix, DVector};
+use imm_pdaf::simulator as sim;
+use itertools::izip;
 
-fn main() {
-    let file = std::fs::File::open("data/data_for_ekf.mat").unwrap();
-    let mat_file = matfile::MatFile::parse(file).unwrap();
-    let z_data = mat_file.find_by_name("Z").unwrap();
-    let (r, c) = (z_data.size()[0], z_data.size()[1]);
-    let z_arr = z_data.data(); 
-    println!("{:#?}", (r, c));
-    if let NumericData::Double{real: d, imag: _} = z_arr {
-        println!("length vec: {}", d.len());
-        let data = DMatrix::from_vec(r, c, d.to_vec());
-        println!("shape data: {:#?}", data.shape());
-        println!("data: {}", data.slice((0,997), (1,999)));
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file = std::fs::File::open("data/data_for_ekf.mat")?;
+    let mat_file = matfile::MatFile::parse(file)?;
+    let K = sim::read_var_from_mat(&mat_file, "K").unwrap()[0]; // Scalar
+    let Ts = sim::read_var_from_mat(&mat_file, "Ts").unwrap()[0]; // Scalar
+    let Xgt = sim::read_var_from_mat(&mat_file, "Xgt").unwrap(); // 5 x K
+    let Z = sim::read_var_from_mat(&mat_file, "Z").unwrap(); // 2 x K
+    println!("K: {}", K);
+    println!("Ts: {}", Ts);
+    println!("Xgt: {}\n, Xgt.shape: {:#?}", Xgt.slice((0,0), (5, 2)), Xgt.shape());
+    println!("Z: {}\n, Z.shape: {:#?}", Z.slice((0,0), (2, 2)), Z.shape());
+    for (k, (z, xgt)) in izip!(
+        Z.slice((0,0), (2, 2)).column_iter(),
+        Xgt.slice((0,0), (5, 2)).column_iter()
+    ).enumerate() {
+        println!("{}:\nz: {}\nxgt: {}", k, z, xgt);
     }
+    Ok(())
 }
