@@ -15,3 +15,4 @@ pub fn read_var_from_mat(mat_file: &MatFile, var_name: &str) -> Option<DMatrix<f
         None
     }
 }
+

@@ -4,6 +4,7 @@ use crate::consistency::Consistency;
 use nalgebra::{DVector, DMatrix};
 use std::f64::consts::TAU as _2_PI;
 
+#[derive(Debug, Clone)]
 pub struct GaussParams {
     pub x: DVector<f64>,
     pub P: DMatrix<f64>,
