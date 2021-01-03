@@ -13,6 +13,7 @@ use imm_pdaf::{
     }
 };
 use itertools::izip;
+use gnuplot::*;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     P0.index_mut((2.., 2..)).copy_from(&cov22);
     
     let mut ekfupd = ekf::GaussParams::new(x0, P0);
-    
+    let mut state = Vec::with_capacity(K as usize);
     
     for (k, (xgt, z)) in izip!(
         Xgt.column_iter(),
@@ -58,9 +59,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).enumerate() {
         let ekfpred = filter.predict(ekfupd, Ts);
         ekfupd = filter.update(&z, ekfpred);
+        state.push(ekfupd.clone());
     }
 
-    println!("Final state:\nx: {}\nP: {}", ekfupd.x, ekfupd.P);
+    let mut fg = Figure::new();
+    fg.axes2d()
+        // .set_y_range(Fix, Fix(1.5))
+        // .set_x_range(Fix(-1.5), Fix(1.5))
+        .lines(
+            state.iter().map(|s| s.x[0]),
+            state.iter().map(|s| s.x[1]),
+            &[Caption("Estimate")/*, PointSymbol('x')*/],
+        )
+        .lines(
+            Xgt.column_iter().map(|xgt| xgt[0]),
+            Xgt.column_iter().map(|xgt| xgt[1]),
+            &[Caption("Ground truth")/*, PointSymbol('x')*/],
+        );
+    fg.show().unwrap();
 
     Ok(())
 }
