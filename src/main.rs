@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     for (k, (xgt, z)) in izip!(
         Xgt.column_iter(),
-        Z.column_iter().map(|z| z.clone_owned()) // Unfortunately, this is the only way of doing this
+        Z.column_iter()//.map(|z| z.clone_owned()) // Unfortunately, this is the only way of doing this
     ).enumerate() {
         let ekfpred = filter.predict(ekfupd, Ts);
         ekfupd = filter.update(&z, ekfpred);

@@ -1,7 +1,7 @@
 use super::models::{DynamicModel, MeasurementModel};
 use super::StateEstimator;
 use crate::consistency::Consistency;
-use nalgebra::{DVector, DMatrix};
+use nalgebra::{DVector, DMatrix, Vector, Dynamic, storage::Storage};
 use std::f64::consts::TAU as _2_PI;
 
 #[derive(Debug, Clone)]
@@ -32,13 +32,16 @@ where
     measmod: M,
 }
 
-impl<D, K> StateEstimator for EKF<D, K>
+impl<'a, 'b, D, K, V> StateEstimator for EKF<D, K>
 where
     D: DynamicModel<State=DVector<f64>, Jacobian=DMatrix<f64>, Covariance=DMatrix<f64>>,
-    K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = DVector<f64>>,
+    K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = V>,
+    V: 'static + std::ops::Sub<Output=DVector<f64>> + Sized + std::ops::Sub,
+&'a V: std::ops::Sub<V, Output=DVector<f64>>,
+
 {
     type Params = GaussParams;
-    type Measurement = DVector<f64>;
+    type Measurement = V;
 
     fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
         let x = &eststate.x;
@@ -52,7 +55,7 @@ where
         GaussParams::new(x, P)
     }
 
-    fn update(&self, z: &Self::Measurement, eststate: Self::Params) -> Self::Params {
+    fn update(&'a self, z: &'a Self::Measurement, eststate: Self::Params) -> Self::Params {
 
         let (v, S) = self.innovation(&eststate, &z);
         
@@ -99,17 +102,19 @@ where
     }
 }
 
-impl<D, K> Consistency for EKF<D, K>
+impl<'a, D, K, V> Consistency for EKF<D, K>
 where
 D: DynamicModel<State=DVector<f64>, Jacobian=DMatrix<f64>, Covariance=DMatrix<f64>>,
-K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = DVector<f64>>,
+K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = V>,
+V: 'static + std::ops::Sub<Output=DVector<f64>> + Sized + std::ops::Sub,
+&'a V: std::ops::Sub<V, Output=DVector<f64>>,
 {
     type Params = GaussParams;
-    type Measurement = DVector<f64>;
+    type Measurement = V;
     type GroundTruth = DVector<f64>;
 
-    fn NIS(&self, eststate: &GaussParams, z: &DVector<f64>) -> f64 {
-        let (v, S) = self.innovation(&eststate, &z);
+    fn NIS(&self, eststate: &Self::Params, z: &Self::Measurement) -> f64 {
+        let (v, S) = self.innovation(&eststate, z);
         let S_inv_v = S.cholesky().expect("S not PSD??").solve(&v);
         let nis = v.dot(&S_inv_v);
         nis
@@ -126,10 +131,12 @@ K: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = 
 }
 
 
-impl<D, M> EKF<D, M>
+impl<'a, D, M, V> EKF<D, M>
 where
 D: DynamicModel<State=DVector<f64>, Jacobian=DMatrix<f64>, Covariance=DMatrix<f64>>,
-M: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = DVector<f64>>,
+M: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>, Measurement = V>,
+V: 'static + std::ops::Sub<Output=DVector<f64>> + Sized + std::ops::Sub,
+&'a V: std::ops::Sub<V, Output=DVector<f64>>,
 {
     pub fn init(dynmod: D, measmod: M) -> Self {
         EKF {
@@ -137,20 +144,21 @@ M: MeasurementModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = 
             measmod,
         }
     }
-    pub fn innovation(&self, eststate: &GaussParams, z: &DVector<f64>) -> (DVector<f64>, DMatrix<f64>) {
+
+    pub fn innovation(&'a self, eststate: &GaussParams, z: &'a V) -> (DVector<f64>, DMatrix<f64>) {
         let v = self.innovation_mean(eststate, z);
         let S = self.innovation_cov(eststate, z);
         (v, S)
     }
 
-    fn innovation_mean(&self, eststate: &GaussParams, z: &DVector<f64>) -> DVector<f64> {
+    fn innovation_mean(&'a self, eststate: &GaussParams, z: &'a V) -> DVector<f64> {
         let x = &eststate.x;
         let zpred = self.measmod.h(x);
-        let v = z - zpred;
+        let v: DVector<f64> = z - zpred;
         v
     }
 
-    fn innovation_cov(&self, eststate: &GaussParams, z: &DVector<f64>) -> DMatrix<f64> {
+    fn innovation_cov(&'a self, eststate: &GaussParams, z: &V) -> DMatrix<f64> {
         let x = &eststate.x;
         let H = &self.measmod.H(x);
         let P = &eststate.P;
