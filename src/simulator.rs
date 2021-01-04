@@ -16,9 +16,11 @@ use crate::{
             measurement::CartesianPosition
         },
         ekf
-    }
+    },
+    pdaf::PDAF,
 };
 use itertools::izip;
+use gnuplot::*;
 
 pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
     let gil = pyo3::Python::acquire_gil();
@@ -45,8 +47,52 @@ pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
     let K = context.globals(py).get_item("K").unwrap();
     let ts = context.globals(py).get_item("Ts").unwrap();
 
-    
+    let sigma_z = 3.1;
+    let sigma_a = 2.6;
 
+    let dynmod = CV::new(sigma_a);
+    let measmod = CartesianPosition::new(sigma_z);
+    
+    let filter = ekf::EKF::init(dynmod, measmod);
+    
+    let x0 = DVector::from_row_slice(&[
+        Z[(0,1)], Z[(1,1)], (Z[(0,1)] - Z[(0,0)]) / Ts, (Z[(1,1)] - Z[(1,0)]) / Ts 
+    ]);
+    let pn = 2;
+    let vn = 2;
+    let n = pn + vn;
+    let cov11 = sigma_z.powi(2) * DMatrix::identity(pn, pn);
+    let cov12 = sigma_z.powi(2) * DMatrix::identity(pn, pn) / Ts;
+    let cov22 = (2.0 * (sigma_z / Ts).powi(2) + sigma_a.powi(2) * Ts / 3.0) * DMatrix::identity(vn, vn);
+    
+    let mut P0 = DMatrix::zeros(n, n);
+    
+    P0.index_mut((..2, ..2)).copy_from(&cov11);
+    P0.index_mut((0..2, 2..)).copy_from(&cov12);
+    P0.index_mut((2.., ..2)).copy_from(&cov12.transpose());
+    P0.index_mut((2.., 2..)).copy_from(&cov22);
+    
+    let ekfupd = ekf::GaussParams::new(x0, P0);
+    let clutter_intensity = 1e-3;
+    let PD = 0.8;
+    let gate_size = 5;
+
+    let tracker = PDAF::init(filter, clutter_intensity, PD, gate_size);
+
+    for k in 0..K {
+        python! {
+            #![context = &context]
+                zk = Z['k]
+            }
+        
+        let zk = context.globals(py).get_item("zk").unwrap();
+        let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
+        let Z = A.row_iter().map(|z| z.clone_owned()).collect::<Vec<_>>();
+
+        let ekfpred = tracker.predict(ekfupd, Ts);
+        ekfupd = tracker.update(&Z, filter_state);
+    }
+    
     Ok(())
 }
 
@@ -100,7 +146,7 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
     P0.index_mut((2.., 2..)).copy_from(&cov22);
     
     let mut ekfupd = ekf::GaussParams::new(x0, P0);
-    
+    let mut state = Vec::with_capacity(K as usize);
     
     for (k, (xgt, z)) in izip!(
         Xgt.column_iter(),
@@ -108,9 +154,24 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
     ).enumerate() {
         let ekfpred = filter.predict(ekfupd, Ts);
         ekfupd = filter.update(&z, ekfpred);
+        state.push(ekfupd.clone());
     }
 
-    println!("Final state:\nx: {}\nP: {}", ekfupd.x, ekfupd.P);
+    let mut fg = Figure::new();
+    fg.axes2d()
+        // .set_y_range(Fix, Fix(1.5))
+        // .set_x_range(Fix(-1.5), Fix(1.5))
+        .lines(
+            state.iter().map(|s| s.x[0]),
+            state.iter().map(|s| s.x[1]),
+            &[Caption("Estimate")/*, PointSymbol('x')*/],
+        )
+        .lines(
+            Xgt.column_iter().map(|xgt| xgt[0]),
+            Xgt.column_iter().map(|xgt| xgt[1]),
+            &[Caption("Ground truth")/*, PointSymbol('x')*/],
+        );
+    fg.show().unwrap();
 
     Ok(())
 }

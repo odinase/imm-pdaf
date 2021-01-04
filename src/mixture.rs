@@ -3,6 +3,7 @@ pub struct MixtureParameters<T> {
     components: Vec<T>,
 }
 
+
 impl<T> MixtureParameters<T> {
     pub fn new(weights: Vec<f64>, components: Vec<T>) -> Self {
         MixtureParameters {
