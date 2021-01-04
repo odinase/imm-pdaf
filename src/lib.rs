@@ -4,3 +4,4 @@ pub mod consistency;
 pub mod mixture;
 pub mod simulator;
 pub mod mat_reader;
+pub mod pdaf;
