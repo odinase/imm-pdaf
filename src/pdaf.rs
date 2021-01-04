@@ -21,6 +21,14 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
 <S as StateEstimator>::Params: Clone,
 <S as StateEstimator>::Measurement: Clone,
 {
+    pub fn init(state_filter: S, clutter_intensity: f64, PD: f64, gate_size: f64) -> Self {
+        PDAF {
+            state_filter,
+            clutter_intensity,
+            PD,
+            gate_size,
+        }
+    }
     /*
     def predict(self, filter_state: ET, Ts: float) -> ET:
         """Predict state estimate Ts time units ahead"""
