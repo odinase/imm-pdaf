@@ -17,5 +17,5 @@ use gnuplot::*;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    sim::run_ekf()
+    sim::run_pdaf()
 }

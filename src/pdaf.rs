@@ -19,7 +19,7 @@ impl<S> PDAF<S>
 where
 S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
 <S as StateEstimator>::Params: Clone,
-<S as StateEstimator>::Measurement: Clone,
+<S as StateEstimator>::Measurement: Clone + std::fmt::Debug,
 {
     pub fn init(state_filter: S, clutter_intensity: f64, PD: f64, gate_size: f64) -> Self {
         PDAF {
@@ -114,7 +114,6 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         for l in log_assos {
             ll.push(l);
         }
-
         ll
     }
     /*
@@ -137,9 +136,7 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
     */
     pub fn association_probabilities(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: &<S as StateEstimator>::Params) -> Vec<f64> {
         let lls = self.loglikelihood_ratios(Z, filter_state);
-
         let logsumexp = lls.iter().map(|l| l.exp()).sum::<f64>().ln();
-
         let beta = lls.iter().map(|l| (l - logsumexp).exp()).collect();
         beta
     }

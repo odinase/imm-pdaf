@@ -11,6 +11,12 @@ pub struct GaussParams {
     pub P: DMatrix<f64>,
 }
 
+impl std::fmt::Display for GaussParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "x: {}\nP: {}", self.x, self.P)
+    }
+}
+
 impl GaussParams {
     fn set(self, x: DVector<f64>, P: DMatrix<f64>) -> Self {
         GaussParams { x, P }
@@ -88,7 +94,7 @@ where
     fn loglikelihood(&self, z: &Self::Measurement, eststate: &Self::Params) -> f64 {
         let nis = self.NIS(eststate, z);
         let S = self.innovation_cov(eststate, z);
-        let c = (_2_PI * S).determinant();
+        let c = (_2_PI * S).determinant().ln();
         let llh = -0.5 * (c + nis);
         llh
     }
@@ -132,14 +138,25 @@ where
 
 fn gaussian_reduce_mixture(mix_params: MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
     let num_params = mix_params.components.len();
-    let nx = mix_params.components[0].len();
+    // We assume all components have equal state length
+    let nx = mix_params.components[0].x.len();
 
-    let x_mean = mix_params.components.iter().map(|p| (p.x, p.P)).zip(mix_params.weights.iter()).fold(
-        (DVector::zeros(nx), DMatrix::zeros(nx, nx)),
-        |(xmean, Pmean), ((x, P), w)|
-        xmean += x;
-        
+    let x_mean = mix_params.components.iter().map(|p| &p.x).zip(mix_params.weights.iter()).fold(
+        DVector::zeros(nx),
+        |mut xmean, (x, &w)| {
+            xmean += x*w;
+            xmean
+        }
     );
+    let P_mean = mix_params.components.iter().map(|p| (&p.x, &p.P)).zip(mix_params.weights.iter()).fold(
+        DMatrix::zeros(nx, nx),
+        |mut P_mean, ((x, P), &w)| {
+            let xdiff = x - &x_mean;
+            P_mean += P*w + w*&xdiff*&xdiff.transpose();
+            P_mean
+        }
+    );
+    (x_mean, P_mean)
 }
 
 impl<D, K> ReduceMixture<GaussParams> for EKF<D, K>
@@ -153,7 +170,11 @@ where
     >,
 {
     fn reduce_mixture(&self, estimator_mixture: MixtureParameters<GaussParams>) -> GaussParams {
-
+        let (xmean, Pmean) = gaussian_reduce_mixture(estimator_mixture);
+        GaussParams::new(
+            xmean,
+            Pmean
+        )
     }
 }
 

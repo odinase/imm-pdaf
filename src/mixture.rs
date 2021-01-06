@@ -1,6 +1,6 @@
 pub struct MixtureParameters<T> {
-    weights: Vec<f64>,
-    components: Vec<T>,
+    pub weights: Vec<f64>,
+    pub components: Vec<T>,
 }
 
 
