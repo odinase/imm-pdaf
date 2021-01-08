@@ -1,4 +1,6 @@
 pub mod ekf;
+use ekf::GaussParams;
+pub mod imm;
 pub mod models;
 
 pub trait StateEstimator {
@@ -11,7 +13,7 @@ pub trait StateEstimator {
 
     fn step(&self, z: &Self::Measurement, eststate: Self::Params, ts: f64) -> Self::Params;
 
-    fn estimate(&self, eststate: Self::Params) -> Self::Params;
+    fn estimate(&self, eststate: Self::Params) -> GaussParams;
 
     fn loglikelihood(&self, z: &Self::Measurement, eststate: &Self::Params) -> f64;
 

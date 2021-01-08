@@ -1,7 +1,7 @@
 use super::models::{DynamicModel, MeasurementModel};
 use super::StateEstimator;
 use crate::consistency::Consistency;
-use crate::mixture::{MixtureParameters, ReduceMixture};
+use crate::mixture::{MixtureParameters, ReduceMixture, gaussian_reduce_mixture};
 use nalgebra::{DMatrix, DVector};
 use std::f64::consts::TAU as _2_PI;
 
@@ -136,28 +136,6 @@ where
     }
 }
 
-fn gaussian_reduce_mixture(mix_params: MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
-    let num_params = mix_params.components.len();
-    // We assume all components have equal state length
-    let nx = mix_params.components[0].x.len();
-
-    let x_mean = mix_params.components.iter().map(|p| &p.x).zip(mix_params.weights.iter()).fold(
-        DVector::zeros(nx),
-        |mut xmean, (x, &w)| {
-            xmean += x*w;
-            xmean
-        }
-    );
-    let P_mean = mix_params.components.iter().map(|p| (&p.x, &p.P)).zip(mix_params.weights.iter()).fold(
-        DMatrix::zeros(nx, nx),
-        |mut P_mean, ((x, P), &w)| {
-            let xdiff = x - &x_mean;
-            P_mean += P*w + w*&xdiff*&xdiff.transpose();
-            P_mean
-        }
-    );
-    (x_mean, P_mean)
-}
 
 impl<D, K> ReduceMixture<GaussParams> for EKF<D, K>
 where
