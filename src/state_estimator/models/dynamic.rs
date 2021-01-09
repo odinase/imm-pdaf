@@ -2,6 +2,7 @@ use super::DynamicModel;
 use super::MeasurementModel;
 use nalgebra::{DMatrix, DVector, Matrix4, Vector4, U2};
 
+#[derive(Debug, Clone)]
 pub struct CV {
     // Acceleration noise covariance
     sigma_a: f64,
@@ -61,6 +62,7 @@ impl DynamicModel for CV {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CT {
     sigma_a: f64,
     sigma_w: f64,

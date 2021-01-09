@@ -27,6 +27,7 @@ impl GaussParams {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct EKF<D, M>
 where
     D: DynamicModel,
