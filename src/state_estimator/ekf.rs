@@ -28,24 +28,13 @@ impl GaussParams {
 }
 
 #[derive(Clone, Debug)]
-pub struct EKF<D, M>
-where
-    D: DynamicModel,
-    M: MeasurementModel,
+pub struct EKF
 {
-    dynmod: D,
-    measmod: M,
+    dynmod: DynamicModel,
+    measmod: MeasurementModel,
 }
 
-impl<D, K> StateEstimator for EKF<D, K>
-where
-    D: DynamicModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>>,
-    K: MeasurementModel<
-        State = DVector<f64>,
-        Jacobian = DMatrix<f64>,
-        Covariance = DMatrix<f64>,
-        Measurement = DVector<f64>,
-    >,
+impl StateEstimator for EKF
 {
     type Params = GaussParams;
     type Measurement = DVector<f64>;
@@ -53,10 +42,14 @@ where
     fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
         let x = &eststate.x;
         let P = &eststate.P;
+        println!("P: {}", P);
         let F = &self.dynmod.F(&x, ts);
+        println!("F: {}", F);
         let Q = &self.dynmod.Q(&x, ts);
+        println!("Q: {}", Q);
         let x = self.dynmod.f(&x, ts);
         let P = F * P * F.transpose() + Q;
+        println!("P: {}", P);
 
         GaussParams::new(x, P)
     }
@@ -106,15 +99,7 @@ where
     }
 }
 
-impl<D, K> Consistency for EKF<D, K>
-where
-    D: DynamicModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>>,
-    K: MeasurementModel<
-        State = DVector<f64>,
-        Jacobian = DMatrix<f64>,
-        Covariance = DMatrix<f64>,
-        Measurement = DVector<f64>,
-    >,
+impl Consistency for EKF
 {
     type Params = GaussParams;
     type Measurement = DVector<f64>;
@@ -138,18 +123,10 @@ where
 }
 
 
-impl<D, K> ReduceMixture<GaussParams> for EKF<D, K>
-where
-    D: DynamicModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>>,
-    K: MeasurementModel<
-        State = DVector<f64>,
-        Jacobian = DMatrix<f64>,
-        Covariance = DMatrix<f64>,
-        Measurement = DVector<f64>,
-    >,
+impl ReduceMixture<GaussParams> for EKF
 {
     fn reduce_mixture(&self, estimator_mixture: MixtureParameters<GaussParams>) -> GaussParams {
-        let (xmean, Pmean) = gaussian_reduce_mixture(estimator_mixture);
+        let (xmean, Pmean) = gaussian_reduce_mixture(&estimator_mixture);
         GaussParams::new(
             xmean,
             Pmean
@@ -157,17 +134,9 @@ where
     }
 }
 
-impl<D, M> EKF<D, M>
-where
-    D: DynamicModel<State = DVector<f64>, Jacobian = DMatrix<f64>, Covariance = DMatrix<f64>>,
-    M: MeasurementModel<
-        State = DVector<f64>,
-        Jacobian = DMatrix<f64>,
-        Covariance = DMatrix<f64>,
-        Measurement = DVector<f64>,
-    >,
+impl EKF
 {
-    pub fn init(dynmod: D, measmod: M) -> Self {
+    pub fn init(dynmod: DynamicModel, measmod: MeasurementModel) -> Self {
         EKF { dynmod, measmod }
     }
     pub fn innovation(
@@ -200,8 +169,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_estimator::models::dynamic::{CT, CV};
-    use crate::state_estimator::models::measurement::CartesianPosition;
     use crate::state_estimator::models::{DynamicModel, MeasurementModel};
 
     static SIGMA_A_CV: f64 = 0.5;
@@ -223,8 +190,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::ct(SIGMA_A_CT, SIGMA_OMEGA);
 
         let ekf = EKF::init(dynmod, measmod);
 
@@ -314,8 +281,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::ct(SIGMA_A_CT, SIGMA_OMEGA);
 
         let ekf = EKF::init(dynmod, measmod);
 
@@ -379,8 +346,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CT::new(SIGMA_A_CT, SIGMA_OMEGA);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::ct(SIGMA_A_CT, SIGMA_OMEGA);
 
         let ekf = EKF::init(dynmod, measmod);
 
@@ -448,8 +415,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CV::new(SIGMA_A_CV);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::cv(SIGMA_A_CV);
 
         let ekf = EKF::init(dynmod, measmod);
 
@@ -538,8 +505,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CV::new(SIGMA_A_CV);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::cv(SIGMA_A_CV);
 
         let ekf = EKF::init(dynmod, measmod);
 
@@ -606,8 +573,8 @@ mod tests {
         );
         let z = DVector::from_row_slice(&[1.0, 0.0]);
 
-        let measmod = CartesianPosition::new(SIGMA_Z);
-        let dynmod = CV::new(SIGMA_A_CV);
+        let measmod = MeasurementModel::cartesian_position(SIGMA_Z);
+        let dynmod = DynamicModel::cv(SIGMA_A_CV);
 
         let ekf = EKF::init(dynmod, measmod);
 

@@ -3,9 +3,24 @@ use crate::state_estimator::ekf::GaussParams;
 
 trait MixtureParameter{}
 
+#[derive(Debug, Clone)]
 pub struct MixtureParameters<T> {
     pub weights: Vec<f64>,
     pub components: Vec<T>,
+}
+
+
+impl<T> std::fmt::Display for MixtureParameters<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = String::from("");
+        for (w, c) in self.iter() {
+            d = String::from(format!("{}\nweight: {}\ncomponent: {}", d, w, c));
+        }
+        write!(f, "{}", d)
+    }
 }
 
 impl<T> MixtureParameter for MixtureParameters<T> {} 
@@ -113,7 +128,7 @@ pub trait ReduceMixture<T> {
 }
 
 
-pub fn gaussian_reduce_mixture(mix_params: MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
+pub fn gaussian_reduce_mixture(mix_params: &MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
     let num_params = mix_params.components.len();
     // We assume all components have equal state length
     let nx = mix_params.components[0].x.len();

@@ -11,10 +11,7 @@ use crate::{
     simulator as sim,
     state_estimator::{
         StateEstimator,
-        models::{
-            dynamic::CV,
-            measurement::CartesianPosition
-        },
+        models::{DynamicModel, MeasurementModel},
         ekf
     },
     pdaf::PDAF,
@@ -52,8 +49,8 @@ pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
     let sigma_z: f64 = 3.2;
     let sigma_a = 2.2;
 
-    let dynmod = CV::new(sigma_a);
-    let measmod = CartesianPosition::new(sigma_z);
+    let dynmod = DynamicModel::cv(sigma_a);
+    let measmod = MeasurementModel::cartesian_position(sigma_z);
     
     let filter = ekf::EKF::init(dynmod, measmod);
     
@@ -134,8 +131,8 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
     let sigma_z = 3.1;
     let sigma_a = 2.6;
 
-    let dynmod = CV::new(sigma_a);
-    let measmod = CartesianPosition::new(sigma_z);
+    let dynmod = DynamicModel::cv(sigma_a);
+    let measmod = MeasurementModel::cartesian_position(sigma_z);
     
     let filter = ekf::EKF::init(dynmod, measmod);
     
