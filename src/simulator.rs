@@ -19,6 +19,7 @@ use crate::{
     }
 };
 use itertools::izip;
+use std::time::{Duration, Instant};
 
 
 
@@ -28,10 +29,10 @@ pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::new_with_gil(py).unwrap();
     
 	python! {
-		#![context = &context]
+        #![context = &context]
         from scipy.io import loadmat
         import numpy as np
-
+        
         data_file_name = "data/data_for_pda.mat"
         loaded_data = loadmat(data_file_name)
         K = loaded_data["K"].item()
@@ -40,16 +41,16 @@ pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
         Z = [zk.T for zk in loaded_data["Z"].ravel()]
         true_association = loaded_data["a"].ravel()
     }
-
+    
     let Xgt_numpy = context.globals(py).get_item("Xgt").unwrap();
-
+    
     let Xgt: nalgebra::DMatrix<f64> = matrix_from_numpy(py, Xgt_numpy).unwrap();
     let K: i32 = context.globals(py).get_item("K").unwrap().extract::<f64>().unwrap() as i32;
     let Ts: f64 = context.globals(py).get_item("Ts").unwrap().extract().unwrap();
-
+    
     let sigma_z: f64 = 3.2;
     let sigma_a = 2.2;
-
+    
     let dynmod = DynamicModel::cv(sigma_a);
     let measmod = MeasurementModel::cartesian_position(sigma_z);
     
@@ -57,51 +58,54 @@ pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {
     
     let x0 = DVector::from_row_slice(&[
         31.52499977, -76.76457537,   0.,   0.
-    ]);
-    let pn = 2;
-    let vn = 2;
-    let n = pn + vn;
-    let cov11 = sigma_z.powi(2) * DMatrix::identity(pn, pn) * 500.0;
-    let cov12: DMatrix<f64> = sigma_z.powi(2) * DMatrix::identity(pn, pn) / Ts;
-    let cov22 = (2.0 * (sigma_z / Ts).powi(2) + sigma_a.powi(2) * Ts / 3.0) * DMatrix::identity(vn, vn) * 100.0;
-    
-    let mut P0 = DMatrix::zeros(n, n);
-    
-    P0.index_mut((..2, ..2)).copy_from(&cov11);
-    P0.index_mut((0..2, 2..)).copy_from(&cov12);
-    P0.index_mut((2.., ..2)).copy_from(&cov12.transpose());
-    P0.index_mut((2.., 2..)).copy_from(&cov22);
-    let P0 = DMatrix::from_row_slice(n, n, &[
-     20.48,   0.  ,   0.  ,   0.  ,
-          0.  ,  20.48,   0.  ,   0. ,
-          0.  ,   0.  , 100.  ,   0. ,
-          0.  ,   0.  ,   0.  , 100. ]);
-    
-    let mut ekfupd = ekf::GaussParams::new(x0, P0);
-    let clutter_intensity = 1e-3;
+        ]);
+        let pn = 2;
+        let vn = 2;
+        let n = pn + vn;
+        let cov11 = sigma_z.powi(2) * DMatrix::identity(pn, pn) * 500.0;
+        let cov12: DMatrix<f64> = sigma_z.powi(2) * DMatrix::identity(pn, pn) / Ts;
+        let cov22 = (2.0 * (sigma_z / Ts).powi(2) + sigma_a.powi(2) * Ts / 3.0) * DMatrix::identity(vn, vn) * 100.0;
+        
+        let mut P0 = DMatrix::zeros(n, n);
+        
+        P0.index_mut((..2, ..2)).copy_from(&cov11);
+        P0.index_mut((0..2, 2..)).copy_from(&cov12);
+        P0.index_mut((2.., ..2)).copy_from(&cov12.transpose());
+        P0.index_mut((2.., 2..)).copy_from(&cov22);
+        let P0 = DMatrix::from_row_slice(n, n, &[
+            20.48,   0.  ,   0.  ,   0.  ,
+            0.  ,  20.48,   0.  ,   0. ,
+            0.  ,   0.  , 100.  ,   0. ,
+            0.  ,   0.  ,   0.  , 100. ]);
+            
+            let mut ekfupd = ekf::GaussParams::new(x0, P0);
+            let clutter_intensity = 1e-3;
     let PD = 0.8;
     let gate_size = 5.0;
 
     let tracker = PDAF::init(filter, clutter_intensity, PD, gate_size);
     let mut state = Vec::with_capacity(K as usize);
-
+    
+    let start = Instant::now();
     for k in 0..K {
         python! {
             #![context = &context]
-                zk = Z['k]
-            }
+            zk = Z['k]
+        }
         let zk = context.globals(py).get_item("zk").unwrap();
         let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
         let Z = zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>();
         let ekfpred = tracker.predict(ekfupd, Ts);
-        ekfupd = tracker.update(Z.as_slice(), ekfpred);
+        ekfupd = tracker.update(Z, ekfpred);
         state.push(ekfupd.clone());
     }
-
+    let duration = start.elapsed();
+    println!("Time elapsed in sim is: {:?}", duration);
+    
     println!("{}", ekfupd);
-
+    
     plotting::plot_states(state.as_slice(), Some(&Xgt));
-
+    
     Ok(())
 }
 
@@ -112,7 +116,7 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::new_with_gil(py).unwrap();
     
 	python! {
-		#![context = &context]
+        #![context = &context]
         from scipy.io import loadmat
         import numpy as np
 
@@ -180,25 +184,29 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
     let mut state = Vec::with_capacity(K as usize);
 
+
+    let start = Instant::now();
     for k in 0..K {
         python! {
             #![context = &context]
-                zk = Z['k]
-            }
+            zk = Z['k]
+        }
         let zk = context.globals(py).get_item("zk").unwrap();
         let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
-
+        
         let Z = zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>();
         let immstate_pred = tracker.predict(immstate_upd, Ts);
-        immstate_upd = tracker.update(Z.as_slice(), immstate_pred);
+        immstate_upd = tracker.update(Z, immstate_pred);
         let estimate = tracker.estimate(immstate_upd.clone());
         state.push(estimate);
     }
-
+    let duration = start.elapsed();
+    println!("Time elapsed in sim is: {:?}", duration);
+    
     println!("{}", state[state.len()-1]);
-
+    
     plotting::plot_states(state.as_slice(), Some(&Xgt));
-
+    
     Ok(())
 }
 
@@ -255,6 +263,8 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
     let mut ekfupd = ekf::GaussParams::new(x0, P0);
     let mut state = Vec::with_capacity(K as usize);
     
+
+    let start = Instant::now();
     for (k, (xgt, z)) in izip!(
         Xgt.column_iter(),
         Z.column_iter().map(|z| z.clone_owned()) // Unfortunately, this is the only way of doing this
@@ -263,6 +273,8 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
         ekfupd = filter.update(&z, ekfpred);
         state.push(ekfupd.clone());
     }
+    let duration = start.elapsed();
+    println!("Time elapsed in sim is: {:?}", duration);
 
     plotting::plot_states(state.as_slice(), Some(&Xgt));
 

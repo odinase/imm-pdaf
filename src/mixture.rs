@@ -1,8 +1,6 @@
 use nalgebra::{DMatrix, DVector};
 use crate::state_estimator::ekf::GaussParams;
 
-trait MixtureParameter{}
-
 #[derive(Debug, Clone)]
 pub struct MixtureParameters<T> {
     pub weights: Vec<f64>,
@@ -15,22 +13,13 @@ where
     T: std::fmt::Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut d = String::from("");
+        let mut d = String::new();
         for (w, c) in self.iter() {
-            d = String::from(format!("{}\nweight: {}\ncomponent: {}", d, w, c));
+            d.push_str(format!("\nweight: {}\ncomponent: {}", w, c));
         }
         write!(f, "{}", d)
     }
 }
-
-impl<T> MixtureParameter for MixtureParameters<T> {} 
-
-pub struct MixtureParametersRef<'a, T> {
-    pub weights: &'a Vec<f64>,
-    pub components: &'a Vec<T>,
-}
-
-impl<'a, T> MixtureParameter for MixtureParametersRef<'a, T> {} 
 
 impl<'a, T> MixtureParameters<T> {
     pub fn new(weights: Vec<f64>, components: Vec<T>) -> Self {

@@ -228,9 +228,9 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         filter_state_updated_reduced = self.reduce_mixture(filter_state_update_mixture)
         return filter_state_updated_reduced
         */
-        pub fn update(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: <S as StateEstimator>::Params) -> <S as StateEstimator>::Params {
-        let gated = self.gate(Z, &filter_state);
-        let Zg: Vec<<S as StateEstimator>::Measurement> = Z.iter().zip(gated.iter()).filter_map(|(z, &g)| if g {Some(z.clone())} else {None}).collect();
+        pub fn update(&self, Z: Vec<<S as StateEstimator>::Measurement>, filter_state: <S as StateEstimator>::Params) -> <S as StateEstimator>::Params {
+        let gated = self.gate(Z.as_slice(), &filter_state);
+        let Zg: Vec<<S as StateEstimator>::Measurement> = Z.into_iter().zip(gated.iter()).filter_map(|(z, &g)| if g {Some(z)} else {None}).collect();
         
         let beta = self.association_probabilities(&Zg, &filter_state);
         
