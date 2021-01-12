@@ -18,10 +18,6 @@ impl std::fmt::Display for GaussParams {
 }
 
 impl GaussParams {
-    fn set(self, x: DVector<f64>, P: DMatrix<f64>) -> Self {
-        GaussParams { x, P }
-    }
-
     pub fn new(x: DVector<f64>, P: DMatrix<f64>) -> Self {
         GaussParams { x, P }
     }

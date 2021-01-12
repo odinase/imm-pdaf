@@ -1,14 +1,7 @@
 use super::ekf::GaussParams;
-use crate::mixture::{gaussian_reduce_mixture, MixtureParameters, ReduceMixture};
+use crate::mixture::{MixtureParameters, ReduceMixture};
 use crate::state_estimator::StateEstimator;
 use nalgebra::{DMatrix, DMatrixSlice, DVector, DVectorSlice};
-use crate::state_estimator::{
-    ekf::EKF,
-    models::{
-        DynamicModel,
-        MeasurementModel,
-    },
-};
 
 fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>) {
     /*
@@ -32,7 +25,6 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
         cond_pr.component_mul(&P)
     };
     // marginal = [s1_k, ..., sN_k]'
-    // let marginal: Vec<f64> = (cond_pr * pr).into_iter().cloned().collect();
     let marginal: Vec<f64> = joint.row_sum().iter().cloned().collect();
     /*
     conditional = [[s1_k-1|s1_k, ..., s1_k-1|sN_k]
@@ -51,14 +43,17 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
     (marginal, conditional)
 }
 
-
 struct FlipIter<I>
-where I: Iterator {
-    iterators: Vec<I>
+where
+    I: Iterator,
+{
+    iterators: Vec<I>,
 }
 
 impl<I, T> Iterator for FlipIter<I>
-where I: Iterator<Item = T> {
+where
+    I: Iterator<Item = T>,
+{
     type Item = Vec<T>;
     fn next(&mut self) -> Option<Self::Item> {
         let output: Option<Vec<T>> = self.iterators.iter_mut().map(|iter| iter.next()).collect();
@@ -66,13 +61,10 @@ where I: Iterator<Item = T> {
     }
 }
 
-
-pub struct IMM<S>
-{
+pub struct IMM<S> {
     filters: Vec<S>,
     PI: DMatrix<f64>,
 }
-
 
 impl<S> IMM<S>
 where
@@ -107,7 +99,7 @@ where
     fn mix_probabilities(
         &self,
         immstate: &MixtureParameters<<S as StateEstimator>::Params>,
-        ts: f64,
+        _ts: f64,
     ) -> (Vec<f64>, DMatrix<f64>) {
         let (predicted_mode_probabilities, mix_probabilities) =
             discrete_bayes(immstate.weights.as_slice(), &self.PI);
@@ -443,46 +435,51 @@ where
         let m = immstate_mixture.components[0].weights.len();
         let n = immstate_mixture.components.len();
 
+        // Makes a copy of everything in immstate_mixture, but don't know how to do this otherwise. The transpose is because the copy is made column-wise
+        let component_conditioned_mode_prob = DMatrix::from_iterator(
+            m,
+            n,
+            immstate_mixture
+                .components
+                .iter()
+                .map(|c| c.weights.clone())
+                .flatten(),
+        )
+        .transpose();
 
-        // use the Iterator type we just defined
+        let (mode_prob, mode_conditioned_component_prob) =
+            discrete_bayes(weights.as_slice(), &component_conditioned_mode_prob);
 
+        /*
+                            Some pseudo code:
+        comps_per_mode = Vec with length of num modes, containing a Vec for all possible estimates for that one state given an association (from previous iteration)
+        for i, s in enumerate(modes) {
+            for k, a in enumerate(assos) {
+                comps_per_mode[i].push(immstate.components[k].components[i])
+            }
+        }
+        */
+        let comps_per_mode = FlipIter {
+            iterators: immstate_mixture
+                .components
+                .into_iter()
+                .map(|v| v.components.into_iter())
+                .collect(),
+        };
 
-        // for column in dz {
-            //     println!("{:?}", column)
-            // }
-
-            // let mut comps_per_mode = Vec::new();
-            // let num_modes = self.filters.len();
-            // let num_assos = immstate_mixture.components.len();
-            // for mode_idx in 0..num_modes {
-                //     let mut comps_mode = Vec::new();
-                //     for asso_idx in 0..num_assos {
-                    //         comps_mode.push(immstate_mixture.components[asso_idx].components[mode_idx])
-                    //     }
-                    //     comps_per_mode.push(comps_mode);
-                    // }
-                    // Makes a copy of everything in immstate_mixture, but don't know how to do this otherwise. The transpose is because the copy is made column-wise
-                    let component_conditioned_mode_prob = DMatrix::from_iterator(m, n, immstate_mixture.components.iter().map(|c|  c.weights.clone()).flatten()).transpose();
-
-
-                    let (mode_prob, mode_conditioned_component_prob) = discrete_bayes(weights.as_slice(), &component_conditioned_mode_prob);
-
-                    /*
-                    Some pseudo code:
-comps_per_mode = Vec with length of num modes, containing a Vec for all possible estimates for that one state given an association (from previous iteration)
-for i, s in enumerate(modes) {
-    for k, a in enumerate(assos) {
-        comps_per_mode[i].push(immstate.components[k].components[i])
-    }
-}
-*/
-let comps_per_mode = FlipIter { iterators: immstate_mixture.components.into_iter().map(|v| v.components.into_iter()).collect() };
-
-        let mode_states = self.filters
-        .iter()
-        .zip(mode_conditioned_component_prob.row_iter().map(|a| Vec::from(a.into_owned().as_slice()))) // Convert RowVector to Vec
-        .zip(comps_per_mode)
-        .map(|((fs, mode_s_cond_comp_prob), mode_s_comp)| fs.reduce_mixture(MixtureParameters::new(mode_s_cond_comp_prob, mode_s_comp))).collect();
+        let mode_states = self
+            .filters
+            .iter()
+            .zip(
+                mode_conditioned_component_prob
+                    .row_iter()
+                    .map(|a| Vec::from(a.into_owned().as_slice())),
+            ) // Convert RowVector to Vec
+            .zip(comps_per_mode)
+            .map(|((fs, mode_s_cond_comp_prob), mode_s_comp)| {
+                fs.reduce_mixture(MixtureParameters::new(mode_s_cond_comp_prob, mode_s_comp))
+            })
+            .collect();
 
         let immstate_reduced = MixtureParameters::new(mode_prob, mode_states);
 
@@ -490,37 +487,12 @@ let comps_per_mode = FlipIter { iterators: immstate_mixture.components.into_iter
     }
 }
 
-/*
-def NISes(
-    self,
-        z: np.ndarray,
-        immstate: MixtureParameters[MT],
-        *,
-        sensor_state: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[float, np.ndarray]:
-    """Calculate NIS per mode and the average"""
-    NISes = np.array(
-        [
-    fs.NIS(z, ms, sensor_state=sensor_state)
-    for fs, ms in zip(self.filters, immstate.components)
-    ]
-)
-innovs = [
-    fs.innovation(z, ms, sensor_state=sensor_state)
-    for fs, ms in zip(self.filters, immstate.components)
-    ]
-    v_ave = np.average([gp.mean for gp in innovs], axis=0, weights=immstate.weights)
-    S_ave = np.average([gp.cov for gp in innovs], axis=0, weights=immstate.weights)
-    NIS = (v_ave * np.linalg.solve(S_ave, v_ave)).sum()
-    return NIS, NISes
-    */
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_estimator::models::{DynamicModel, MeasurementModel};
     use crate::state_estimator::ekf::EKF;
+    use crate::state_estimator::models::{DynamicModel, MeasurementModel};
 
     use std::f64::consts::PI;
     static SIGMA_A_CV: f64 = 0.2;
@@ -553,28 +525,21 @@ mod tests {
         let weights = vec![0.5, 0.5];
         let immstate = MixtureParameters::new(weights, components);
 
-        let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[
-            0.95, 0.05,
-            0.05, 0.95
-        ]);
+        let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[0.95, 0.05, 0.05, 0.95]);
 
         let imm = IMM::init(filters, trans_prob_mat);
-        
         let immstate = imm.predict(immstate, TS);
         let estimate = imm.estimate(immstate);
 
-        let x_correct =
-            DVector::from_row_slice(&[0., 0., 0., 0., 0.]);
+        let x_correct = DVector::from_row_slice(&[0., 0., 0., 0., 0.]);
         let P_correct = DMatrix::from_row_slice(
             5,
             5,
             &[
-                7.38020833, 0.        , 2.578125  , 0.        , 0., 
-                0.        , 7.38020833, 0.        , 2.578125  , 0.,
-       2.578125  , 0.        , 1.0625    , 0.        , 0.        ,
-       0.        , 2.578125  , 0.        , 1.0625    , 0.        ,
-       0.        , 0.        , 0.        , 0.        , 0.50004935
-            ]);
+                7.38020833, 0., 2.578125, 0., 0., 0., 7.38020833, 0., 2.578125, 0., 2.578125, 0.,
+                1.0625, 0., 0., 0., 2.578125, 0., 1.0625, 0., 0., 0., 0., 0., 0.50004935,
+            ],
+        );
         assert!(estimate.x.len() == 5, "x.len() = {}", estimate.x.len());
         assert!(
             estimate.P.shape() == (5, 5),
@@ -610,26 +575,23 @@ mod tests {
         let weights = vec![0.5, 0.5];
         let immstate = MixtureParameters::new(weights, components);
 
-        let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[
-            0.95, 0.05,
-            0.05, 0.95
-        ]);
+        let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[0.95, 0.05, 0.05, 0.95]);
 
         let imm = IMM::init(filters, trans_prob_mat);
-        
         let immstate = imm.predict(immstate, TS);
         let immstate = imm.update(&z, immstate);
         let estimate = imm.estimate(immstate);
-        let x_correct = DVector::from_row_slice(&[ 1.11271634, 11.12603866,  0.38894036,  3.88901048,  0. ]);
+        let x_correct =
+            DVector::from_row_slice(&[1.11271634, 11.12603866, 0.38894036, 3.88901048, 0.]);
         let P_correct = DMatrix::from_row_slice(
             5,
             5,
             &[
-      4.05693263, 0.00041544, 1.41808462, 0.00033466, 0.        ,
-       0.00041544, 4.06104508, 0.00033466, 1.42139743, 0.        ,
-       1.41808462, 0.00033466, 0.65876418, 0.00026959, 0.        ,
-       0.00033466, 1.42139743, 0.00026959, 0.66143283, 0.        ,
-       0.        , 0.        , 0.        , 0.        , 0.45773908 ]);
+                4.05693263, 0.00041544, 1.41808462, 0.00033466, 0., 0.00041544, 4.06104508,
+                0.00033466, 1.42139743, 0., 1.41808462, 0.00033466, 0.65876418, 0.00026959, 0.,
+                0.00033466, 1.42139743, 0.00026959, 0.66143283, 0., 0., 0., 0., 0., 0.45773908,
+            ],
+        );
         assert!(estimate.x.len() == 5, "x.len() = {}", estimate.x.len());
         assert!(
             estimate.P.shape() == (5, 5),

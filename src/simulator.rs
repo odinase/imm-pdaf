@@ -1,10 +1,7 @@
-#![feature(proc_macro_hygiene)]
 use inline_python::{python, Context};
 use nalgebra_numpy::matrix_from_numpy;
-use nalgebra_numpy::matrix_slice_mut_from_numpy;
-use nalgebra_numpy::matrix_slice_from_numpy;
 use nalgebra::{DMatrix, DVector};
-use pyo3::{GILGuard, ObjectProtocol};
+use pyo3::ObjectProtocol;
 use matfile::{NumericData, MatFile};
 use matfile;
 use crate::{
@@ -22,7 +19,7 @@ use crate::{
     }
 };
 use itertools::izip;
-use gnuplot::*;
+
 
 
 pub fn run_pdaf() -> Result<(), Box<dyn std::error::Error>> {

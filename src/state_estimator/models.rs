@@ -35,7 +35,7 @@ impl MeasurementModel {
             }
         }
     }
-    pub fn R(&self, x: &DVector<f64>, z: &DVector<f64>) -> DMatrix<f64> {
+    pub fn R(&self, _x: &DVector<f64>, z: &DVector<f64>) -> DMatrix<f64> {
         match self {
             Self::CartesianPosition(sigma_z) => {
                 let n = z.len();
@@ -105,8 +105,6 @@ impl DynamicModel {
                 F
             }
             Self::CT(_, _) => {
-                let x0 = x[0];
-                let y0 = x[1];
                 let u0 = x[2];
                 let v0 = x[3];
                 let omega = x[4];

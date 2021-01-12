@@ -125,8 +125,12 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         let log_PND = (1.0 - self.PD).ln();
         let log_clutter = self.clutter_intensity.ln();
 
-        // All associations and no association
-        let mut ll = Vec::with_capacity(Z.len() + 1);
+        let mut ll = Vec::with_capacity(
+            // All associations 
+            Z.len() 
+            // No association
+            + 1
+        );
 
         ll.push(log_PND + log_clutter); // missed detection
 
@@ -247,43 +251,3 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         self.state_filter.estimate(filter_state)
     }
 }
-
-
-
-/*
-
-
-
-
-
-    
-
-
-
-
-
-    def step(
-        self,
-        # measurements of shape=(M, m)=(#measurements, dim)
-        Z: np.ndarray,
-        filter_state: ET,
-        Ts: float,
-        *,
-        sensor_state: Optional[Dict[str, Any]] = None,
-    ) -> ET:
-        """Perform a prict update cycle with Ts time units and measurements Z in sensor_state"""
-
-        filter_state_predicted = self.predict(filter_state, Ts)
-        filter_state_updated = self.update(
-            Z, filter_state_predicted, sensor_state=sensor_state
-        )
-        return filter_state_updated
-    def init_filter_state(
-        self,
-        # need to have the type required by the specified state_filter
-        init_state: "ET_like",
-    ) -> ET:
-        """Initialize a filter state to proper form."""
-        return self.state_filter.init_filter_state(init_state)
-
-*/

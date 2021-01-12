@@ -129,7 +129,6 @@ pub trait ReduceMixture<T> {
 
 
 pub fn gaussian_reduce_mixture(mix_params: &MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
-    let num_params = mix_params.components.len();
     // We assume all components have equal state length
     let nx = mix_params.components[0].x.len();
     let x_mean = mix_params.components.iter().map(|p| &p.x).zip(mix_params.weights.iter()).fold(
