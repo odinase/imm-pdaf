@@ -28,12 +28,12 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
     */
     let joint: DMatrix<f64> = {
         // Broadcast pr rowwise, ie, it repeats at each row for n rows
-        let P = DMatrixSlice::from_slice_with_strides(pr.as_slice(), m, n, 0, 1);
+        let P = DMatrixSlice::from_slice_with_strides(pr.as_slice(), m, n, 1, 0);
         cond_pr.component_mul(&P)
     };
-
     // marginal = [s1_k, ..., sN_k]'
-    let marginal: Vec<f64> = (cond_pr * pr).into_iter().cloned().collect();
+    // let marginal: Vec<f64> = (cond_pr * pr).into_iter().cloned().collect();
+    let marginal: Vec<f64> = joint.row_sum().iter().cloned().collect();
     /*
     conditional = [[s1_k-1|s1_k, ..., s1_k-1|sN_k]
                               ...
@@ -41,10 +41,12 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
     */
     let conditional = {
         // Broadcast pr rowwise, ie, it repeats at each row for n rows
-        let M = DMatrixSlice::from_slice_with_strides(marginal.as_slice(), n, m, 0, 1);
+        let M = DMatrixSlice::from_slice_with_strides(marginal.as_slice(), m, n, 0, 1);
         // May blow up, let's hope it doesn't
-        joint.transpose().component_div(&M)
+        joint.component_div(&M)
     };
+
+    let conditional = conditional.transpose();
 
     (marginal, conditional)
 }
@@ -462,6 +464,7 @@ where
                     // Makes a copy of everything in immstate_mixture, but don't know how to do this otherwise. The transpose is because the copy is made column-wise
                     let component_conditioned_mode_prob = DMatrix::from_iterator(m, n, immstate_mixture.components.iter().map(|c|  c.weights.clone()).flatten()).transpose();
 
+
                     let (mode_prob, mode_conditioned_component_prob) = discrete_bayes(weights.as_slice(), &component_conditioned_mode_prob);
 
                     /*
@@ -558,7 +561,6 @@ mod tests {
         let imm = IMM::init(filters, trans_prob_mat);
         
         let immstate = imm.predict(immstate, TS);
-        println!("{}", immstate);
         let estimate = imm.estimate(immstate);
 
         let x_correct =

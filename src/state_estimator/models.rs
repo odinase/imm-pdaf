@@ -182,7 +182,6 @@ impl DynamicModel {
                         ts.powi(2) / 2.0,
                     ));
                 Q *= sigma_a.powi(2);
-                println!("\n\n{}\n\n", Q);
                 Q
             }
             Self::CT(sigma_a, sigma_w) => {

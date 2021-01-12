@@ -42,14 +42,10 @@ impl StateEstimator for EKF
     fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
         let x = &eststate.x;
         let P = &eststate.P;
-        println!("P: {}", P);
         let F = &self.dynmod.F(&x, ts);
-        println!("F: {}", F);
         let Q = &self.dynmod.Q(&x, ts);
-        println!("Q: {}", Q);
         let x = self.dynmod.f(&x, ts);
         let P = F * P * F.transpose() + Q;
-        println!("P: {}", P);
 
         GaussParams::new(x, P)
     }

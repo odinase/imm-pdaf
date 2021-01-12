@@ -1,5 +1,6 @@
 use super::state_estimator::StateEstimator;
 use super::mixture::{ReduceMixture, MixtureParameters};
+use super::state_estimator::ekf::GaussParams;
 /*
 @dataclass
 class PDA(Generic[ET]):  # Probabilistic Data Association
@@ -16,10 +17,30 @@ pub struct PDAF<S: StateEstimator> {
     gate_size: f64,
 }
 
+
+
+impl<S> ReduceMixture<<S as StateEstimator>::Params> for PDAF<S>
+where
+S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
+<S as StateEstimator>::Params: std::fmt::Display
+{
+    /*
+    def reduce_mixture(
+        self, mixture_filter_state: MixtureParameters[ET]
+    ) -> ET:  # the two first moments of the mixture
+        """Reduce a Gaussian mixture to a single Gaussian."""
+        return self.state_filter.reduce_mixture(mixture_filter_state)
+    */
+    fn reduce_mixture(&self, mixture_filter_state: MixtureParameters<<S as StateEstimator>::Params>) -> <S as StateEstimator>::Params {
+        self.state_filter.reduce_mixture(mixture_filter_state)
+    }
+
+}
+
 impl<S> PDAF<S>
 where
 S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
-<S as StateEstimator>::Params: Clone,
+<S as StateEstimator>::Params: Clone + std::fmt::Display,
 <S as StateEstimator>::Measurement: Clone + std::fmt::Debug,
 {
     pub fn init(state_filter: S, clutter_intensity: f64, PD: f64, gate_size: f64) -> Self {
@@ -169,16 +190,6 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         cond_updates
     }
     /*
-    def reduce_mixture(
-        self, mixture_filter_state: MixtureParameters[ET]
-    ) -> ET:  # the two first moments of the mixture
-        """Reduce a Gaussian mixture to a single Gaussian."""
-        return self.state_filter.reduce_mixture(mixture_filter_state)
-    */
-    pub fn reduce_mixture(&self, mixture_filter_state: MixtureParameters<<S as StateEstimator>::Params>) -> <S as StateEstimator>::Params {
-        self.state_filter.reduce_mixture(mixture_filter_state)
-    }
-    /*
     def update(
         self,
         # measurements of shape=(M, m)=(#measurements, dim)
@@ -212,22 +223,32 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         # reduce mixture
         filter_state_updated_reduced = self.reduce_mixture(filter_state_update_mixture)
         return filter_state_updated_reduced
-    */
-    pub fn update(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: <S as StateEstimator>::Params) -> <S as StateEstimator>::Params {
+        */
+        pub fn update(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: <S as StateEstimator>::Params) -> <S as StateEstimator>::Params {
         let gated = self.gate(Z, &filter_state);
         let Zg: Vec<<S as StateEstimator>::Measurement> = Z.iter().zip(gated.iter()).filter_map(|(z, &g)| if g {Some(z.clone())} else {None}).collect();
-
+        
         let beta = self.association_probabilities(&Zg, &filter_state);
-
+        
         let filter_state_update_mixture_components = self.conditional_update(&Zg, filter_state);
-
+        
         let filter_state_update_mixture = MixtureParameters::new(beta, filter_state_update_mixture_components);
-
+        
         let filter_state_update_reduced = self.reduce_mixture(filter_state_update_mixture);
-
+        
         filter_state_update_reduced
     }
+    /*
+        def estimate(self, filter_state: ET) -> GaussParams:
+            """Get an estimate with its covariance from the filter state."""
+            return self.state_filter.estimate(filter_state)
+    */
+    pub fn estimate(&self, filter_state: <S as StateEstimator>::Params) -> GaussParams {
+        self.state_filter.estimate(filter_state)
+    }
 }
+
+
 
 /*
 
@@ -257,11 +278,6 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
             Z, filter_state_predicted, sensor_state=sensor_state
         )
         return filter_state_updated
-
-    def estimate(self, filter_state: ET) -> GaussParams:
-        """Get an estimate with its covariance from the filter state."""
-        return self.state_filter.estimate(filter_state)
-
     def init_filter_state(
         self,
         # need to have the type required by the specified state_filter

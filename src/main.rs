@@ -3,5 +3,5 @@ use imm_pdaf::simulator as sim;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    sim::run_pdaf()
+    sim::run_imm()
 }
