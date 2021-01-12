@@ -12,16 +12,14 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
                [sN_k|s1_k-1, ..., sN_k|sN_k-1]]
     */
     let (m, n) = cond_pr.shape();
-    // Recast to DVector. No copying is made
-    let pr: DVectorSlice<'_, f64> = DVectorSlice::from_slice(pr, pr.len());
-    /*
+   /*
       joint = [[s1_k, s1_k-1, ..., s1_k, sN_k-1]
                              ...
                [sN_k, s1_k-1, ..., sN_k, sN_k-1]]
     */
     let joint: DMatrix<f64> = {
         // Broadcast pr rowwise, ie, it repeats at each row for n rows
-        let P = DMatrixSlice::from_slice_with_strides(pr.as_slice(), m, n, 1, 0);
+        let P = DMatrixSlice::from_slice_with_strides(pr, m, n, 1, 0);
         cond_pr.component_mul(&P)
     };
     // marginal = [s1_k, ..., sN_k]'
@@ -129,7 +127,6 @@ where
             .zip(
                 mix_probabilities
                     .row_iter() // Iterate over rows
-                    .into_iter() // Take ownership (consume)
                     .map(|r| Vec::from(r.into_owned().as_slice())), // Convert DVector to Vec (without copying, hopefully)
             )
             .map(|(fs, mix_pr_s)| {

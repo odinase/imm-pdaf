@@ -213,7 +213,7 @@ impl DynamicModel {
 }
 
 
-// Helpers for computing Q in CT
+// Helpers for computing F in CT
 
 // Computes sin(x)/x
 fn sinc(x: f64) -> f64 {
