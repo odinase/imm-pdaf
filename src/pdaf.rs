@@ -31,8 +31,8 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         """Reduce a Gaussian mixture to a single Gaussian."""
         return self.state_filter.reduce_mixture(mixture_filter_state)
     */
-    fn reduce_mixture(&self, mixture_filter_state: MixtureParameters<<S as StateEstimator>::Params>) -> <S as StateEstimator>::Params {
-        self.state_filter.reduce_mixture(mixture_filter_state)
+    fn reduce_mixture(&self, mixture_filter_state_weights: &[f64], mixture_filter_state_components: &[<S as StateEstimator>::Params]) -> <S as StateEstimator>::Params {
+        self.state_filter.reduce_mixture(mixture_filter_state_weights, mixture_filter_state_components)
     }
 
 }
@@ -236,9 +236,7 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         
         let filter_state_update_mixture_components = self.conditional_update(&Zg, filter_state);
         
-        let filter_state_update_mixture = MixtureParameters::new(beta, filter_state_update_mixture_components);
-        
-        let filter_state_update_reduced = self.reduce_mixture(filter_state_update_mixture);
+        let filter_state_update_reduced = self.reduce_mixture(&beta, &filter_state_update_mixture_components);
         
         filter_state_update_reduced
     }

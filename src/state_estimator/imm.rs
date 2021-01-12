@@ -118,7 +118,7 @@ where
     */
     fn mix_states(
         &self,
-        immstate: MixtureParameters<<S as StateEstimator>::Params>,
+        immstate_components: &[<S as StateEstimator>::Params],
         mix_probabilities: DMatrix<f64>,
     ) -> Vec<<S as StateEstimator>::Params> {
         let mixed_states = self
@@ -127,14 +127,13 @@ where
             .zip(
                 mix_probabilities
                     .row_iter() // Iterate over rows
-                    .map(|r| Vec::from(r.into_owned().as_slice())), // Convert DVector to Vec (without copying, hopefully)
+                    .map(|r| r.into_owned())
             )
             .map(|(fs, mix_pr_s)| {
-                fs.reduce_mixture(MixtureParameters::new(
-                    mix_pr_s,
-                    // TODO: Don't clone this
-                    immstate.components.clone(),
-                ))
+                fs.reduce_mixture(
+                    mix_pr_s.as_slice(),
+                    immstate_components
+                )
             })
             .collect();
         mixed_states
@@ -270,7 +269,8 @@ where
         let (predicted_mode_probability, mixing_probability) =
             self.mix_probabilities(&immstate, ts);
 
-        let mixed_mode_states = self.mix_states(immstate, mixing_probability);
+        let (_, immstate_components) = immstate.destructure();
+        let mixed_mode_states = self.mix_states(immstate_components.as_slice(), mixing_probability);
         let predicted_mode_states = self.mode_matched_prediction(mixed_mode_states, ts);
 
         let predicted_immstate =
@@ -334,7 +334,8 @@ where
                 return self.filters[0].estimate(dataRed)
     */
     fn estimate(&self, immstate: Self::Params) -> GaussParams {
-        let reduced_estimate = self.filters[0].reduce_mixture(immstate);
+        let (weights, components) = immstate.destructure();
+        let reduced_estimate = self.filters[0].reduce_mixture(weights.as_slice(), components.as_slice());
         self.filters[0].estimate(reduced_estimate)
     }
     /*
@@ -397,6 +398,7 @@ where
 impl<S> ReduceMixture<MixtureParameters<<S as StateEstimator>::Params>> for IMM<S>
 where
     S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
+    MixtureParameters<<S as StateEstimator>::Params>: Clone,
 {
     /*
     def reduce_mixture(
@@ -426,29 +428,29 @@ where
         */
     fn reduce_mixture(
         &self,
-        immstate_mixture: MixtureParameters<MixtureParameters<<S as StateEstimator>::Params>>,
+        immstate_weights: &[f64],
+        immstate_components: &[MixtureParameters<<S as StateEstimator>::Params>]
     ) -> MixtureParameters<<S as StateEstimator>::Params> {
-        let weights = &immstate_mixture.weights;
-        let m = immstate_mixture.components[0].weights.len();
-        let n = immstate_mixture.components.len();
+        let m = immstate_components[0].weights.len();
+        let n = immstate_components.len();
 
-        // Makes a copy of everything in immstate_mixture, but don't know how to do this otherwise. The transpose is because the copy is made column-wise
         let component_conditioned_mode_prob = DMatrix::from_iterator(
             m,
             n,
-            immstate_mixture
-                .components
+            immstate_components
                 .iter()
-                .map(|c| c.weights.clone())
+                // Don't really see a way of avoiding the copy here. Needs to ponder more
+                .cloned()
+                .map(|c| c.weights)
                 .flatten(),
         )
         .transpose();
 
         let (mode_prob, mode_conditioned_component_prob) =
-            discrete_bayes(weights.as_slice(), &component_conditioned_mode_prob);
+            discrete_bayes(immstate_weights, &component_conditioned_mode_prob);
 
         /*
-                            Some pseudo code:
+        Some pseudo code:
         comps_per_mode = Vec with length of num modes, containing a Vec for all possible estimates for that one state given an association (from previous iteration)
         for i, s in enumerate(modes) {
             for k, a in enumerate(assos) {
@@ -457,9 +459,9 @@ where
         }
         */
         let comps_per_mode = FlipIter {
-            iterators: immstate_mixture
-                .components
-                .into_iter()
+            iterators: immstate_components
+                .iter()
+                .cloned()
                 .map(|v| v.components.into_iter())
                 .collect(),
         };
@@ -470,11 +472,11 @@ where
             .zip(
                 mode_conditioned_component_prob
                     .row_iter()
-                    .map(|a| Vec::from(a.into_owned().as_slice())),
+                    .map(|a| a.into_owned())
             ) // Convert RowVector to Vec
             .zip(comps_per_mode)
             .map(|((fs, mode_s_cond_comp_prob), mode_s_comp)| {
-                fs.reduce_mixture(MixtureParameters::new(mode_s_cond_comp_prob, mode_s_comp))
+                fs.reduce_mixture(mode_s_cond_comp_prob.as_slice(), &mode_s_comp)
             })
             .collect();
 

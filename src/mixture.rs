@@ -15,7 +15,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut d = String::new();
         for (w, c) in self.iter() {
-            d.push_str(format!("\nweight: {}\ncomponent: {}", w, c));
+            d.push_str(&format!("\nweight: {}\ncomponent: {}", w, c));
         }
         write!(f, "{}", d)
     }
@@ -37,6 +37,9 @@ impl<'a, T> MixtureParameters<T> {
         self.into_iter()
     }
 
+    pub fn destructure(self) -> (Vec<f64>, Vec<T>) {
+        (self.weights, self.components)
+    }
 }
 
 
@@ -112,22 +115,23 @@ impl<'a, T> Iterator for MixParamsIterMut<'a, T> {
     }
 }
 
+// Maybe seems odd to not use MixtureParameters here as input, but this is due to Rust ownership
 pub trait ReduceMixture<T> {
-    fn reduce_mixture(&self, estimator_mixture: MixtureParameters<T>) -> T;
+    fn reduce_mixture(&self, weights: &[f64], components: &[T]) -> T;
 }
 
 
-pub fn gaussian_reduce_mixture(mix_params: &MixtureParameters<GaussParams>) -> (DVector<f64>, DMatrix<f64>) {
+pub fn gaussian_reduce_mixture(weights: &[f64], components: &[GaussParams]) -> (DVector<f64>, DMatrix<f64>) {
     // We assume all components have equal state length
-    let nx = mix_params.components[0].x.len();
-    let x_mean = mix_params.components.iter().map(|p| &p.x).zip(mix_params.weights.iter()).fold(
+    let nx = components[0].x.len();
+    let x_mean = components.iter().map(|p| &p.x).zip(weights.iter()).fold(
         DVector::zeros(nx),
         |mut xmean, (x, &w)| {
             xmean += x*w;
             xmean
         }
     );
-    let P_mean = mix_params.components.iter().map(|p| (&p.x, &p.P)).zip(mix_params.weights.iter()).fold(
+    let P_mean = components.iter().map(|p| (&p.x, &p.P)).zip(weights.iter()).fold(
         DMatrix::zeros(nx, nx),
         |mut P_mean, ((x, P), &w)| {
             let xdiff = x - &x_mean;

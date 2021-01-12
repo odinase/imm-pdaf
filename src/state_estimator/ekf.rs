@@ -117,8 +117,8 @@ impl Consistency for EKF
 
 impl ReduceMixture<GaussParams> for EKF
 {
-    fn reduce_mixture(&self, estimator_mixture: MixtureParameters<GaussParams>) -> GaussParams {
-        let (xmean, Pmean) = gaussian_reduce_mixture(&estimator_mixture);
+    fn reduce_mixture(&self, mixture_weights: &[f64], mixture_components: &[GaussParams]) -> GaussParams {
+        let (xmean, Pmean) = gaussian_reduce_mixture(mixture_weights, mixture_components);
         GaussParams::new(
             xmean,
             Pmean
