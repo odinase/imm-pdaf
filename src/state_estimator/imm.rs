@@ -3,7 +3,7 @@ use crate::mixture::{MixtureParameters, ReduceMixture};
 use crate::state_estimator::StateEstimator;
 use nalgebra::{DMatrix, DMatrixSlice, DVector, DVectorSlice};
 
-fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>) {
+fn discrete_bayes(pr: &[f64], cond_pr: &[f64], m: usize, n: usize) -> (Vec<f64>, DMatrix<f64>) {
     /*
     Assumes the form
     pr = [s1_k-1, ..., sN_k-1]'
@@ -11,7 +11,8 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
                     ...
                [sN_k|s1_k-1, ..., sN_k|sN_k-1]]
     */
-    let (m, n) = cond_pr.shape();
+    // Cast to DMatrix
+    let cond_pr = DMatrixSlice::from_slice_with_strides(cond_pr, m, n, n, 1);
    /*
       joint = [[s1_k, s1_k-1, ..., s1_k, sN_k-1]
                              ...
@@ -96,11 +97,12 @@ where
     */
     fn mix_probabilities(
         &self,
-        immstate: &MixtureParameters<<S as StateEstimator>::Params>,
+        immstate_weights: &[f64],
         _ts: f64,
     ) -> (Vec<f64>, DMatrix<f64>) {
+        let (m, n) = self.PI.shape();
         let (predicted_mode_probabilities, mix_probabilities) =
-            discrete_bayes(immstate.weights.as_slice(), &self.PI);
+            discrete_bayes(immstate_weights, self.PI.as_slice(), m, n);
         (predicted_mode_probabilities, mix_probabilities)
     }
     /*
@@ -180,13 +182,13 @@ where
     fn mode_matched_update(
         &self,
         z: &DVector<f64>,
-        immstate: MixtureParameters<<S as StateEstimator>::Params>,
+        immstate_components: &[<S as StateEstimator>::Params],
     ) -> Vec<<S as StateEstimator>::Params> {
         let updated_state = self
             .filters
             .iter()
-            .zip(immstate.components.into_iter())
-            .map(|(fs, cs)| fs.update(&z, cs))
+            .zip(immstate_components.iter())
+            .map(|(fs, &cs)| fs.update(&z, cs))
             .collect();
         updated_state
     }
@@ -213,13 +215,14 @@ where
     fn update_mode_probabilities(
         &self,
         z: &DVector<f64>,
-        immstate: &MixtureParameters<<S as StateEstimator>::Params>,
+        immstate_weights: &[f64],
+        immstate_components: &[<S as StateEstimator>::Params]
     ) -> Vec<f64> {
         let logjoint: Vec<f64> = self
             .filters
             .iter()
-            .zip(immstate.components.iter())
-            .zip(immstate.weights.iter())
+            .zip(immstate_components.iter())
+            .zip(immstate_weights.iter())
             .map(|((fs, cs), w)| fs.loglikelihood(&z, cs) + w.ln())
             .collect();
 
@@ -240,7 +243,7 @@ where
         + Clone,
     <S as StateEstimator>::Params: Clone,
 {
-    type Params = MixtureParameters<<S as StateEstimator>::Params>;
+    type Params = (Vec<f64>, Vec<<S as StateEstimator>::Params>);
     type Measurement = DVector<f64>;
 
     /*
@@ -266,17 +269,15 @@ where
         return predicted_immstate
         */
     fn predict(&self, immstate: Self::Params, ts: f64) -> Self::Params {
+        let (immstate_weights, immstate_components) = immstate;
         let (predicted_mode_probability, mixing_probability) =
-            self.mix_probabilities(&immstate, ts);
+            self.mix_probabilities(immstate_weights.as_slice(), ts);
 
-        let (_, immstate_components) = immstate.destructure();
+        let (_, immstate_components) = immstate;
         let mixed_mode_states = self.mix_states(immstate_components.as_slice(), mixing_probability);
         let predicted_mode_states = self.mode_matched_prediction(mixed_mode_states, ts);
 
-        let predicted_immstate =
-            MixtureParameters::new(predicted_mode_probability, predicted_mode_states);
-
-        predicted_immstate
+        (predicted_mode_probability, predicted_mode_states)
     }
 
     /*
@@ -297,13 +298,12 @@ where
         return updated_immstate
         */
     fn update(&self, z: &Self::Measurement, immstate: Self::Params) -> Self::Params {
-        let updated_weights = self.update_mode_probabilities(z, &immstate);
+        let (immstate_weights, immstate_components) = immstate;
+        let updated_weights = self.update_mode_probabilities(z, &immstate_weights, &immstate_components);
 
-        let updated_states = self.mode_matched_update(z, immstate);
+        let updated_states = self.mode_matched_update(z, &immstate_components);
 
-        let updated_immstate = MixtureParameters::new(updated_weights, updated_states);
-
-        updated_immstate
+        (updated_weights, updated_states)
     }
 
     /*
@@ -334,7 +334,7 @@ where
                 return self.filters[0].estimate(dataRed)
     */
     fn estimate(&self, immstate: Self::Params) -> GaussParams {
-        let (weights, components) = immstate.destructure();
+        let (weights, components) = immstate;
         let reduced_estimate = self.filters[0].reduce_mixture(weights.as_slice(), components.as_slice());
         self.filters[0].estimate(reduced_estimate)
     }
@@ -357,11 +357,13 @@ where
     return ll
     */
     fn loglikelihood(&self, z: &Self::Measurement, immstate: &Self::Params) -> f64 {
+        let (immstate_weights, immstate_components) = immstate;
         let ll = self
             .filters
             .iter()
-            .zip(immstate.iter())
-            .map(|(fs, (weight, modestate_s))| (fs.loglikelihood(z, &modestate_s).exp() * weight))
+            .zip(immstate_weights.iter())
+            .zip(immstate_components.iter())
+            .map(|((fs, weight), modestate_s)| (fs.loglikelihood(z, &modestate_s).exp() * weight))
             .sum::<f64>()
             .ln();
 
@@ -385,10 +387,11 @@ where
         return gated
         */
     fn gate(&self, z: &Self::Measurement, immstate: &Self::Params, gate_size_square: f64) -> bool {
+        let (_, immstate_components) = immstate;
         let gated = self
             .filters
             .iter()
-            .zip(immstate.components.iter())
+            .zip(immstate_components.iter())
             // Look for first gating that returns true. Better way to do this?
             .any(|(fs, ds)| fs.gate(z, ds, gate_size_square));
         gated
@@ -431,12 +434,12 @@ where
         immstate_weights: &[f64],
         immstate_components: &[MixtureParameters<<S as StateEstimator>::Params>]
     ) -> MixtureParameters<<S as StateEstimator>::Params> {
-        let m = immstate_components[0].weights.len();
-        let n = immstate_components.len();
+        let n = immstate_components[0].weights.len();
+        let m = immstate_components.len();
 
         let component_conditioned_mode_prob = DMatrix::from_iterator(
-            m,
             n,
+            m,
             immstate_components
                 .iter()
                 // Don't really see a way of avoiding the copy here. Needs to ponder more

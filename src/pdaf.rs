@@ -22,7 +22,6 @@ pub struct PDAF<S: StateEstimator> {
 impl<S> ReduceMixture<<S as StateEstimator>::Params> for PDAF<S>
 where
 S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
-<S as StateEstimator>::Params: std::fmt::Display
 {
     /*
     def reduce_mixture(
@@ -184,8 +183,11 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         ]
     */
     pub fn conditional_update(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: <S as StateEstimator>::Params) -> Vec<<S as StateEstimator>::Params> {
-        let mut cond_updates = Vec::with_capacity(Z.len() + 1);
-        cond_updates.push(filter_state.clone());
+        let mut cond_weights = Vec::with_capacity(Z.len() + 1);
+        let mut cond_components = Vec::with_capacity(Z.len() + 1);
+
+        let (filter_weight, filter_component) = filter_state;
+        cond_weights.push(filter_weight.clone());
 
         for upd in Z.iter().map(|z| self.state_filter.update(&z, filter_state.clone())) {
             cond_updates.push(upd);
