@@ -2,6 +2,9 @@ use super::ekf::GaussParams;
 use crate::mixture::{MixtureParameters, ReduceMixture};
 use crate::state_estimator::StateEstimator;
 use nalgebra::{DMatrix, DMatrixSlice, DVector, DVectorSlice};
+use std::time::{Duration, Instant};
+use rayon::prelude::*;
+
 
 fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>) {
     /*
@@ -68,9 +71,9 @@ impl<S> IMM<S>
 where
     S: StateEstimator<Measurement = DVector<f64>>
         + ReduceMixture<<S as StateEstimator>::Params>
-        + Clone,
-    <S as StateEstimator>::Params: Clone,
-{
+        + Clone + Send + Sync,
+        <S as StateEstimator>::Params: Clone + Send + Sync,
+        {
     pub fn init(filters: Vec<S>, PI: DMatrix<f64>) -> Self {
         IMM { filters, PI }
     }
@@ -157,9 +160,9 @@ where
     ) -> Vec<<S as StateEstimator>::Params> {
         let modestates_pred = self
             .filters
-            .iter()
-            .zip(mode_states.into_iter())
-            .map(|(fs, cs)| fs.predict(cs, ts))
+            .par_iter()
+            .zip(mode_states.into_par_iter())
+            .map(|(fs, cs)| fs.predict(&cs, ts))
             .collect();
         modestates_pred
     }
@@ -180,12 +183,12 @@ where
     fn mode_matched_update(
         &self,
         z: &DVector<f64>,
-        immstate: MixtureParameters<<S as StateEstimator>::Params>,
+        immstate: &MixtureParameters<<S as StateEstimator>::Params>,
     ) -> Vec<<S as StateEstimator>::Params> {
         let updated_state = self
             .filters
             .iter()
-            .zip(immstate.components.into_iter())
+            .zip(immstate.components.iter())
             .map(|(fs, cs)| fs.update(&z, cs))
             .collect();
         updated_state
@@ -237,8 +240,8 @@ impl<S> StateEstimator for IMM<S>
 where
     S: StateEstimator<Measurement = DVector<f64>>
         + ReduceMixture<<S as StateEstimator>::Params>
-        + Clone,
-    <S as StateEstimator>::Params: Clone,
+        + Clone + Send + Sync,
+    <S as StateEstimator>::Params: Clone + Send + Sync,
 {
     type Params = MixtureParameters<<S as StateEstimator>::Params>;
     type Measurement = DVector<f64>;
@@ -265,12 +268,11 @@ where
         )
         return predicted_immstate
         */
-    fn predict(&self, immstate: Self::Params, ts: f64) -> Self::Params {
+    fn predict(&self, immstate: &Self::Params, ts: f64) -> Self::Params {
         let (predicted_mode_probability, mixing_probability) =
             self.mix_probabilities(&immstate, ts);
 
-        let (_, immstate_components) = immstate.destructure();
-        let mixed_mode_states = self.mix_states(immstate_components.as_slice(), mixing_probability);
+        let mixed_mode_states = self.mix_states(immstate.components.as_slice(), mixing_probability);
         let predicted_mode_states = self.mode_matched_prediction(mixed_mode_states, ts);
 
         let predicted_immstate =
@@ -296,13 +298,26 @@ where
         updated_immstate = MixtureParameters(updated_weights, updated_states)
         return updated_immstate
         */
-    fn update(&self, z: &Self::Measurement, immstate: Self::Params) -> Self::Params {
+    fn update(&self, z: &Self::Measurement, immstate: &Self::Params) -> Self::Params {
+        
+        
+        
+        // let start_update_mode_probabilities = Instant::now();
         let updated_weights = self.update_mode_probabilities(z, &immstate);
-
+        // let duration_update_mode_probabilities = start_update_mode_probabilities.elapsed();
+        // println!("Time elapsed in update_mode_probabilities is: {:?}", duration_update_mode_probabilities);
+        
+        // let start_mode_matched_update = Instant::now();
         let updated_states = self.mode_matched_update(z, immstate);
+        // let duration_mode_matched_update = start_mode_matched_update.elapsed();
+        // println!("Time elapsed in mode_matched_update is: {:?}", duration_mode_matched_update);
+        
+        // let total = (duration_update_mode_probabilities + duration_mode_matched_update).as_nanos() as f32 / 1000.0;
+        
+        // println!("Total time: {:.2}\nIn update_mode_probabilities: {:.2}%\nIn mode_matched_update: {:.2}%", total, duration_update_mode_probabilities.as_nanos() as f32/total*0.1, duration_mode_matched_update.as_nanos() as f32/total*0.1);
 
         let updated_immstate = MixtureParameters::new(updated_weights, updated_states);
-
+        
         updated_immstate
     }
 
@@ -319,9 +334,9 @@ where
         updated_immstate = self.update(z, predicted_immstate, sensor_state=sensor_state)
         return updated_immstate
         */
-    fn step(&self, z: &Self::Measurement, immstate: Self::Params, ts: f64) -> Self::Params {
+    fn step(&self, z: &Self::Measurement, immstate: &Self::Params, ts: f64) -> Self::Params {
         let predicted_immstate = self.predict(immstate, ts);
-        let updated_immstate = self.update(z, predicted_immstate);
+        let updated_immstate = self.update(z, &predicted_immstate);
 
         updated_immstate
     }
@@ -527,7 +542,7 @@ mod tests {
         let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[0.95, 0.05, 0.05, 0.95]);
 
         let imm = IMM::init(filters, trans_prob_mat);
-        let immstate = imm.predict(immstate, TS);
+        let immstate = imm.predict(&immstate, TS);
         let estimate = imm.estimate(immstate);
 
         let x_correct = DVector::from_row_slice(&[0., 0., 0., 0., 0.]);
@@ -577,8 +592,8 @@ mod tests {
         let trans_prob_mat = DMatrix::from_row_slice(2, 2, &[0.95, 0.05, 0.05, 0.95]);
 
         let imm = IMM::init(filters, trans_prob_mat);
-        let immstate = imm.predict(immstate, TS);
-        let immstate = imm.update(&z, immstate);
+        let immstate = imm.predict(&immstate, TS);
+        let immstate = imm.update(&z, &immstate);
         let estimate = imm.estimate(immstate);
         let x_correct =
             DVector::from_row_slice(&[1.11271634, 11.12603866, 0.38894036, 3.88901048, 0.]);

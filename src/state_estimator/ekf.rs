@@ -35,7 +35,7 @@ impl StateEstimator for EKF
     type Params = GaussParams;
     type Measurement = DVector<f64>;
 
-    fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
+    fn predict(&self, eststate: &Self::Params, ts: f64) -> Self::Params {
         let x = &eststate.x;
         let P = &eststate.P;
         let F = &self.dynmod.F(&x, ts);
@@ -46,7 +46,7 @@ impl StateEstimator for EKF
         GaussParams::new(x, P)
     }
 
-    fn update(&self, z: &Self::Measurement, eststate: Self::Params) -> Self::Params {
+    fn update(&self, z: &Self::Measurement, eststate: &Self::Params) -> Self::Params {
         let (v, S) = self.innovation(&eststate, &z);
         let x = &eststate.x;
         let P = &eststate.P;
@@ -66,9 +66,9 @@ impl StateEstimator for EKF
         GaussParams::new(x, P)
     }
 
-    fn step(&self, z: &Self::Measurement, eststate: Self::Params, ts: f64) -> Self::Params {
+    fn step(&self, z: &Self::Measurement, eststate: &Self::Params, ts: f64) -> Self::Params {
         let eststate_pred = self.predict(eststate, ts);
-        let eststate_upd = self.update(z, eststate_pred);
+        let eststate_upd = self.update(z, &eststate_pred);
         eststate_upd
     }
 

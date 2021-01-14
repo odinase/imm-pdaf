@@ -119,7 +119,7 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         #![context = &context]
         from scipy.io import loadmat
         import numpy as np
-
+        
         data_file_name = "data/data_for_imm_pda.mat"
         loaded_data = loadmat(data_file_name)
         K = loaded_data["K"].item()
@@ -128,12 +128,27 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         Z = [zk.T for zk in loaded_data["Z"].ravel()]
         true_association = loaded_data["a"].ravel()
     }
-
+    
     let Xgt_numpy = context.globals(py).get_item("Xgt").unwrap();
-
+    
     let Xgt: nalgebra::DMatrix<f64> = matrix_from_numpy(py, Xgt_numpy).unwrap();
     let K: i32 = context.globals(py).get_item("K").unwrap().extract::<f64>().unwrap() as i32;
     let Ts: f64 = context.globals(py).get_item("Ts").unwrap().extract().unwrap();
+    
+    // Build Z "cell array"
+    let mut Z = Vec::new();
+
+    for k in 0..K {
+
+        println!("\n\niteration: {}", k);
+        python! {
+            #![context = &context]
+            zk = Z['k]
+        }
+        let zk = context.globals(py).get_item("zk").unwrap();
+        let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();   
+        Z.push(zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>());
+    }
 
     let sigma_z: f64 = 2.84;
     let sigma_a_cv = 0.14;
@@ -186,17 +201,9 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
 
 
     let start = Instant::now();
-    for k in 0..K {
-        python! {
-            #![context = &context]
-            zk = Z['k]
-        }
-        let zk = context.globals(py).get_item("zk").unwrap();
-        let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
-        
-        let Z = zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>();
+    for z in Z.into_iter() {
         let immstate_pred = tracker.predict(immstate_upd, Ts);
-        immstate_upd = tracker.update(Z, immstate_pred);
+        immstate_upd = tracker.update(z, immstate_pred);
         let estimate = tracker.estimate(immstate_upd.clone());
         state.push(estimate);
     }
@@ -269,8 +276,8 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
         Xgt.column_iter(),
         Z.column_iter().map(|z| z.clone_owned()) // Unfortunately, this is the only way of doing this
     ).enumerate() {
-        let ekfpred = filter.predict(ekfupd, Ts);
-        ekfupd = filter.update(&z, ekfpred);
+        let ekfpred = filter.predict(&ekfupd, Ts);
+        ekfupd = filter.update(&z, &ekfpred);
         state.push(ekfupd.clone());
     }
     let duration = start.elapsed();

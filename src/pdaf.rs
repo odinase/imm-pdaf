@@ -1,6 +1,9 @@
 use super::state_estimator::StateEstimator;
 use super::mixture::{ReduceMixture, MixtureParameters};
 use super::state_estimator::ekf::GaussParams;
+use std::time::{Duration, Instant};
+use rayon::prelude::*;
+
 /*
 @dataclass
 class PDA(Generic[ET]):  # Probabilistic Data Association
@@ -39,9 +42,9 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
 
 impl<S> PDAF<S>
 where
-S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
-<S as StateEstimator>::Params: Clone + std::fmt::Display,
-<S as StateEstimator>::Measurement: Clone + std::fmt::Debug,
+S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params> + Send + Sync,
+<S as StateEstimator>::Params: Clone + std::fmt::Display + Send + Sync,
+<S as StateEstimator>::Measurement: Clone + std::fmt::Debug + Send + Sync,
 {
     pub fn init(state_filter: S, clutter_intensity: f64, PD: f64, gate_size: f64) -> Self {
         PDAF {
@@ -57,7 +60,7 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         return self.state_filter.predict(filter_state, Ts)
     */
     pub fn predict(&self, filter_state: <S as StateEstimator>::Params, ts: f64) -> <S as StateEstimator>::Params {
-        self.state_filter.predict(filter_state, ts)
+        self.state_filter.predict(&filter_state, ts)
     }
     /*
     def gate(
@@ -184,12 +187,7 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         ]
     */
     pub fn conditional_update(&self, Z: &[<S as StateEstimator>::Measurement], filter_state: <S as StateEstimator>::Params) -> Vec<<S as StateEstimator>::Params> {
-        let mut cond_updates = Vec::with_capacity(Z.len() + 1);
-        cond_updates.push(filter_state.clone());
-
-        for upd in Z.iter().map(|z| self.state_filter.update(&z, filter_state.clone())) {
-            cond_updates.push(upd);
-        }
+        let cond_updates = rayon::iter::once(filter_state.clone()).chain(Z.par_iter().map(|z| self.state_filter.update(&z, &filter_state))).collect();
 
         cond_updates
     }
@@ -230,13 +228,27 @@ S: StateEstimator + ReduceMixture<<S as StateEstimator>::Params>,
         */
         pub fn update(&self, Z: Vec<<S as StateEstimator>::Measurement>, filter_state: <S as StateEstimator>::Params) -> <S as StateEstimator>::Params {
         let gated = self.gate(Z.as_slice(), &filter_state);
-        let Zg: Vec<<S as StateEstimator>::Measurement> = Z.into_iter().zip(gated.iter()).filter_map(|(z, &g)| if g {Some(z)} else {None}).collect();
-        
+        let Zg: Vec<<S as StateEstimator>::Measurement> = Z.into_par_iter().zip(gated.par_iter()).filter_map(|(z, &g)| if g {Some(z)} else {None}).collect();
+            
+        // let start_association_probabilities = Instant::now();
         let beta = self.association_probabilities(&Zg, &filter_state);
-        
+        // let duration_association_probabilities = start_association_probabilities.elapsed();
+        // println!("Time elapsed in association_probabilities is: {:?}", duration_association_probabilities);
+
+        // let start_conditional_update = Instant::now();
         let filter_state_update_mixture_components = self.conditional_update(&Zg, filter_state);
-        
+        // let duration_conditional_update = start_conditional_update.elapsed();
+        // println!("Time elapsed in conditional_update is: {:?}", duration_conditional_update);
+            
+        // let start_reduce_mixture = Instant::now();
         let filter_state_update_reduced = self.reduce_mixture(&beta, &filter_state_update_mixture_components);
+        // let duration_reduce_mixture = start_reduce_mixture.elapsed();
+        // println!("Time elapsed in reduce_mixture is: {:?}", duration_reduce_mixture);
+
+        // let total = (duration_association_probabilities + duration_conditional_update + duration_reduce_mixture).as_nanos() as f32 / 1000.0;
+
+        // println!("Total time: {:.2}\nIn association_probabilities: {:.2}%\nIn conditional_update: {:.2}%\nIn reduce_mixture: {:.2}%", total, duration_association_probabilities.as_nanos() as f32/total*0.1, duration_conditional_update.as_nanos() as f32/total*0.1, duration_reduce_mixture.as_nanos() as f32/total*0.1);
+            
         
         filter_state_update_reduced
     }
