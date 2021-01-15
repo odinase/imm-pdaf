@@ -388,7 +388,6 @@ where
             .filters
             .iter()
             .zip(immstate.components.iter())
-            // Look for first gating that returns true. Better way to do this?
             .any(|(fs, ds)| fs.gate(z, ds, gate_size_square));
         gated
     }
