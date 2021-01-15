@@ -19,7 +19,7 @@ use crate::{
     }
 };
 use itertools::izip;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 
 
@@ -119,7 +119,7 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         #![context = &context]
         from scipy.io import loadmat
         import numpy as np
-
+        
         data_file_name = "data/data_for_imm_pda.mat"
         loaded_data = loadmat(data_file_name)
         K = loaded_data["K"].item()
@@ -128,12 +128,24 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         Z = [zk.T for zk in loaded_data["Z"].ravel()]
         true_association = loaded_data["a"].ravel()
     }
-
+    
     let Xgt_numpy = context.globals(py).get_item("Xgt").unwrap();
-
+    
     let Xgt: nalgebra::DMatrix<f64> = matrix_from_numpy(py, Xgt_numpy).unwrap();
     let K: i32 = context.globals(py).get_item("K").unwrap().extract::<f64>().unwrap() as i32;
     let Ts: f64 = context.globals(py).get_item("Ts").unwrap().extract().unwrap();
+    
+    // Set up measurements
+    let mut Z = Vec::new();
+    for k in 0..K {
+        python! {
+            #![context = &context]
+            zk = Z['k]
+        }
+        let zk = context.globals(py).get_item("zk").unwrap();
+        let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
+        Z.push(zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>());
+    }
 
     let sigma_z: f64 = 2.84;
     let sigma_a_cv = 0.14;
@@ -184,18 +196,6 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
     let mut state = Vec::with_capacity(K as usize);
 
-    // Set up measurements
-    let mut Z = Vec::new();
-    for k in 0..K {
-        python! {
-            #![context = &context]
-            zk = Z['k]
-        }
-        let zk = context.globals(py).get_item("zk").unwrap();
-        let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
-        Z.push(zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>());
-    }
-
     let start = Instant::now();
     for z in Z.into_iter() {
         let immstate_pred = tracker.predict(immstate_upd, Ts);
@@ -206,7 +206,7 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
     
-    println!("{}", state[state.len()-1]);
+    println!("{}", state.last().unwrap());
     
     plotting::plot_states(state.as_slice(), Some(&Xgt));
     

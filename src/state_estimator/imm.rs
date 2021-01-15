@@ -1,7 +1,7 @@
 use super::ekf::GaussParams;
 use crate::mixture::{MixtureParameters, ReduceMixture};
 use crate::state_estimator::StateEstimator;
-use nalgebra::{DMatrix, DMatrixSlice, DVector, DVectorSlice};
+use nalgebra::{DMatrix, DMatrixSlice, DVector};
 
 fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>) {
     /*
