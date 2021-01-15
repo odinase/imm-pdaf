@@ -184,8 +184,8 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
     let mut state = Vec::with_capacity(K as usize);
 
-
-    let start = Instant::now();
+    // Set up measurements
+    let mut Z = Vec::new();
     for k in 0..K {
         python! {
             #![context = &context]
@@ -193,10 +193,13 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         }
         let zk = context.globals(py).get_item("zk").unwrap();
         let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
-        
-        let Z = zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>();
+        Z.push(zk.row_iter().map(|z| z.clone_owned().transpose()).collect::<Vec<_>>());
+    }
+
+    let start = Instant::now();
+    for z in Z.into_iter() {
         let immstate_pred = tracker.predict(immstate_upd, Ts);
-        immstate_upd = tracker.update(Z, immstate_pred);
+        immstate_upd = tracker.update(z, immstate_pred);
         let estimate = tracker.estimate(immstate_upd.clone());
         state.push(estimate);
     }
