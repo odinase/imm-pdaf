@@ -272,8 +272,8 @@ pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
         Xgt.column_iter(),
         Z.column_iter().map(|z| z.clone_owned()) // Unfortunately, this is the only way of doing this
     ).enumerate() {
-        let ekfpred = filter.predict(ekfupd, Ts);
-        ekfupd = filter.update(&z, ekfpred);
+        let ekfpred = filter.predict(&ekfupd, Ts);
+        ekfupd = filter.update(&z, &ekfpred);
         state.push(ekfupd.clone());
     }
     let duration = start.elapsed();

@@ -35,7 +35,7 @@ impl StateEstimator for EKF
     type Params = GaussParams;
     type Measurement = DVector<f64>;
 
-    fn predict(&self, eststate: Self::Params, ts: f64) -> Self::Params {
+    fn predict(&self, eststate: &Self::Params, ts: f64) -> Self::Params {
         let x = &eststate.x;
         let P = &eststate.P;
         let F = &self.dynmod.F(&x, ts);
@@ -46,7 +46,7 @@ impl StateEstimator for EKF
         GaussParams::new(x, P)
     }
 
-    fn update(&self, z: &Self::Measurement, eststate: Self::Params) -> Self::Params {
+    fn update(&self, z: &Self::Measurement, eststate: &Self::Params) -> Self::Params {
         let (v, S) = self.innovation(&eststate, &z);
         let x = &eststate.x;
         let P = &eststate.P;
@@ -66,9 +66,9 @@ impl StateEstimator for EKF
         GaussParams::new(x, P)
     }
 
-    fn step(&self, z: &Self::Measurement, eststate: Self::Params, ts: f64) -> Self::Params {
+    fn step(&self, z: &Self::Measurement, eststate: &Self::Params, ts: f64) -> Self::Params {
         let eststate_pred = self.predict(eststate, ts);
-        let eststate_upd = self.update(z, eststate_pred);
+        let eststate_upd = self.update(z, &eststate_pred);
         eststate_upd
     }
 
@@ -189,7 +189,7 @@ mod tests {
 
         let ekfstate = GaussParams::new(x, P);
 
-        let ekfstate = ekf.predict(ekfstate, TS);
+        let ekfstate = ekf.predict(&ekfstate, TS);
         let x_correct =
             DVector::from_row_slice(&[0.09949834, 0.10049833, 0.98995017, 1.00994983, 0.1]);
         let P_correct = DMatrix::from_row_slice(
@@ -279,7 +279,7 @@ mod tests {
         let ekf = EKF::init(dynmod, measmod);
 
         let ekfstate = GaussParams::new(x, P);
-        let ekfstate = ekf.update(&z, ekfstate);
+        let ekfstate = ekf.update(&z, &ekfstate);
 
         let x_correct =
             DVector::from_row_slice(&[0.99990996, 0.00001005, 0.99003125, 1.0099412, 0.1]);
@@ -345,7 +345,7 @@ mod tests {
 
         let ekfstate = GaussParams::new(x, P);
 
-        let ekfstate = ekf.step(&z, ekfstate, TS);
+        let ekfstate = ekf.step(&z, &ekfstate, TS);
 
         let x_correct =
             DVector::from_row_slice(&[0.99990996, 0.00001005, 0.99003125, 1.0099412, 0.1]);
@@ -414,7 +414,7 @@ mod tests {
 
         let ekfstate = GaussParams::new(x, P);
 
-        let ekfstate = ekf.predict(ekfstate, TS);
+        let ekfstate = ekf.predict(&ekfstate, TS);
         let x_correct = DVector::from_row_slice(&[0.1, 0.1, 1., 1., 0.]);
         let P_correct = DMatrix::from_row_slice(
             5,
@@ -503,7 +503,7 @@ mod tests {
         let ekf = EKF::init(dynmod, measmod);
 
         let ekfstate = GaussParams::new(x, P);
-        let ekfstate = ekf.update(&z, ekfstate);
+        let ekfstate = ekf.update(&z, &ekfstate);
 
         let x_correct =
             DVector::from_row_slice(&[0.99990996, 0.00001005, 0.99003125, 1.00994119, 0.1]);
@@ -572,7 +572,7 @@ mod tests {
 
         let ekfstate = GaussParams::new(x, P);
 
-        let ekfstate = ekf.step(&z, ekfstate, TS);
+        let ekfstate = ekf.step(&z, &ekfstate, TS);
 
         let x_correct = DVector::from_row_slice(&[0.99991001, 0.00001, 1.00008099, 0.999991, 0.]);
         let P_correct = DMatrix::from_row_slice(
