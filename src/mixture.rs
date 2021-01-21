@@ -1,12 +1,11 @@
-use nalgebra::{DMatrix, DVector};
 use crate::state_estimator::ekf::GaussParams;
+use nalgebra::{DMatrix, DVector};
 
 #[derive(Debug, Clone)]
 pub struct MixtureParameters<T> {
     pub weights: Vec<f64>,
     pub components: Vec<T>,
 }
-
 
 impl<T> std::fmt::Display for MixtureParameters<T>
 where
@@ -42,16 +41,13 @@ impl<'a, T> MixtureParameters<T> {
     }
 }
 
-
 pub struct MixParamsIntoIter<T> {
     elem: std::iter::Zip<std::vec::IntoIter<f64>, std::vec::IntoIter<T>>,
 }
 
-
 pub struct MixParamsIter<'a, T> {
     elem: std::iter::Zip<std::slice::Iter<'a, f64>, std::slice::Iter<'a, T>>,
 }
-
 
 pub struct MixParamsIterMut<'a, T> {
     elem: std::iter::Zip<std::slice::IterMut<'a, f64>, std::slice::IterMut<'a, T>>,
@@ -63,9 +59,7 @@ impl<T> IntoIterator for MixtureParameters<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let elem = self.weights.into_iter().zip(self.components.into_iter());
-        MixParamsIntoIter {
-            elem,
-        }
+        MixParamsIntoIter { elem }
     }
 }
 
@@ -75,9 +69,7 @@ impl<'a, T> IntoIterator for &'a MixtureParameters<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let elem = self.weights.iter().zip(self.components.iter());
-        MixParamsIter {
-            elem,
-        }
+        MixParamsIter { elem }
     }
 }
 
@@ -87,9 +79,7 @@ impl<'a, T> IntoIterator for &'a mut MixtureParameters<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let elem = self.weights.iter_mut().zip(self.components.iter_mut());
-        MixParamsIterMut {
-            elem,
-        }
+        MixParamsIterMut { elem }
     }
 }
 
@@ -99,7 +89,6 @@ impl<T> Iterator for MixParamsIntoIter<T> {
         self.elem.next()
     }
 }
-
 
 impl<'a, T> Iterator for MixParamsIter<'a, T> {
     type Item = (&'a f64, &'a T);
@@ -120,24 +109,27 @@ pub trait ReduceMixture<T> {
     fn reduce_mixture(&self, weights: &[f64], components: &[T]) -> T;
 }
 
-
-pub fn gaussian_reduce_mixture(weights: &[f64], components: &[GaussParams]) -> (DVector<f64>, DMatrix<f64>) {
+pub fn gaussian_reduce_mixture(
+    weights: &[f64],
+    components: &[GaussParams],
+) -> (DVector<f64>, DMatrix<f64>) {
     // We assume all components have equal state length
     let nx = components[0].x.len();
     let x_mean = components.iter().map(|p| &p.x).zip(weights.iter()).fold(
         DVector::zeros(nx),
         |mut xmean, (x, &w)| {
-            xmean += x*w;
+            xmean += x * w;
             xmean
-        }
+        },
     );
-    let P_mean = components.iter().map(|p| (&p.x, &p.P)).zip(weights.iter()).fold(
-        DMatrix::zeros(nx, nx),
-        |mut P_mean, ((x, P), &w)| {
+    let P_mean = components
+        .iter()
+        .map(|p| (&p.x, &p.P))
+        .zip(weights.iter())
+        .fold(DMatrix::zeros(nx, nx), |mut P_mean, ((x, P), &w)| {
             let xdiff = x - &x_mean;
-            P_mean += P*w + w*&xdiff*&xdiff.transpose();
+            P_mean += P * w + w * &xdiff * &xdiff.transpose();
             P_mean
-        }
-    );
+        });
     (x_mean, P_mean)
 }

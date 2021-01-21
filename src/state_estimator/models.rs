@@ -54,7 +54,7 @@ impl DynamicModel {
     pub fn ct(sigma_a: f64, sigma_w: f64) -> Self {
         Self::CT(sigma_a, sigma_w)
     }
-    
+
     pub fn f(&self, x: &DVector<f64>, ts: f64) -> DVector<f64> {
         match self {
             Self::CV(_) => {
@@ -100,7 +100,7 @@ impl DynamicModel {
                     .copy_from(&(DMatrix::identity(2, 2) * ts));
                 // In case of IMM, where F is 5 x 5
                 if n == 5 {
-                    F[(4,4)] = 0.0;
+                    F[(4, 4)] = 0.0;
                 }
                 F
             }
@@ -211,7 +211,6 @@ impl DynamicModel {
         }
     }
 }
-
 
 // Helpers for computing F in CT
 

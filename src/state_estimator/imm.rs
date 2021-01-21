@@ -12,7 +12,7 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
                [sN_k|s1_k-1, ..., sN_k|sN_k-1]]
     */
     let (m, n) = cond_pr.shape();
-   /*
+    /*
       joint = [[s1_k, s1_k-1, ..., s1_k, sN_k-1]
                              ...
                [sN_k, s1_k-1, ..., sN_k, sN_k-1]]
@@ -127,14 +127,9 @@ where
             .zip(
                 mix_probabilities
                     .row_iter() // Iterate over rows
-                    .map(|r| r.into_owned())
+                    .map(|r| r.into_owned()),
             )
-            .map(|(fs, mix_pr_s)| {
-                fs.reduce_mixture(
-                    mix_pr_s.as_slice(),
-                    immstate_components
-                )
-            })
+            .map(|(fs, mix_pr_s)| fs.reduce_mixture(mix_pr_s.as_slice(), immstate_components))
             .collect();
         mixed_states
     }
@@ -334,7 +329,8 @@ where
     */
     fn estimate(&self, immstate: Self::Params) -> GaussParams {
         let (weights, components) = immstate.destructure();
-        let reduced_estimate = self.filters[0].reduce_mixture(weights.as_slice(), components.as_slice());
+        let reduced_estimate =
+            self.filters[0].reduce_mixture(weights.as_slice(), components.as_slice());
         self.filters[0].estimate(reduced_estimate)
     }
     /*
@@ -427,7 +423,7 @@ where
     fn reduce_mixture(
         &self,
         immstate_weights: &[f64],
-        immstate_components: &[MixtureParameters<<S as StateEstimator>::Params>]
+        immstate_components: &[MixtureParameters<<S as StateEstimator>::Params>],
     ) -> MixtureParameters<<S as StateEstimator>::Params> {
         let m = immstate_components[0].weights.len();
         let n = immstate_components.len();
@@ -470,7 +466,7 @@ where
             .zip(
                 mode_conditioned_component_prob
                     .row_iter()
-                    .map(|a| a.into_owned())
+                    .map(|a| a.into_owned()),
             ) // Convert RowVector to Vec
             .zip(comps_per_mode)
             .map(|((fs, mode_s_cond_comp_prob), mode_s_comp)| {
@@ -483,7 +479,6 @@ where
         immstate_reduced
     }
 }
-
 
 #[cfg(test)]
 mod tests {

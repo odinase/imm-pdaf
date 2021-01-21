@@ -1,7 +1,7 @@
 use super::models::{DynamicModel, MeasurementModel};
 use super::StateEstimator;
 use crate::consistency::Consistency;
-use crate::mixture::{MixtureParameters, ReduceMixture, gaussian_reduce_mixture};
+use crate::mixture::{gaussian_reduce_mixture, MixtureParameters, ReduceMixture};
 use nalgebra::{DMatrix, DVector};
 use std::f64::consts::TAU as _2_PI;
 
@@ -24,14 +24,12 @@ impl GaussParams {
 }
 
 #[derive(Clone, Debug)]
-pub struct EKF
-{
+pub struct EKF {
     dynmod: DynamicModel,
     measmod: MeasurementModel,
 }
 
-impl StateEstimator for EKF
-{
+impl StateEstimator for EKF {
     type Params = GaussParams;
     type Measurement = DVector<f64>;
 
@@ -91,8 +89,7 @@ impl StateEstimator for EKF
     }
 }
 
-impl Consistency for EKF
-{
+impl Consistency for EKF {
     type Params = GaussParams;
     type Measurement = DVector<f64>;
     type GroundTruth = DVector<f64>;
@@ -114,20 +111,18 @@ impl Consistency for EKF
     }
 }
 
-
-impl ReduceMixture<GaussParams> for EKF
-{
-    fn reduce_mixture(&self, mixture_weights: &[f64], mixture_components: &[GaussParams]) -> GaussParams {
+impl ReduceMixture<GaussParams> for EKF {
+    fn reduce_mixture(
+        &self,
+        mixture_weights: &[f64],
+        mixture_components: &[GaussParams],
+    ) -> GaussParams {
         let (xmean, Pmean) = gaussian_reduce_mixture(mixture_weights, mixture_components);
-        GaussParams::new(
-            xmean,
-            Pmean
-        )
+        GaussParams::new(xmean, Pmean)
     }
 }
 
-impl EKF
-{
+impl EKF {
     pub fn init(dynmod: DynamicModel, measmod: MeasurementModel) -> Self {
         EKF { dynmod, measmod }
     }

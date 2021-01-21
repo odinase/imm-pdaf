@@ -4,5 +4,5 @@ pub trait Consistency {
     type GroundTruth;
 
     fn NIS(&self, eststate: &Self::Params, z: &Self::Measurement) -> f64;
-    fn NEES(&self,eststate: &Self::Params, x_gt: &Self::GroundTruth) -> f64;
+    fn NEES(&self, eststate: &Self::Params, x_gt: &Self::GroundTruth) -> f64;
 }
