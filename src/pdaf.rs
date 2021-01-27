@@ -241,25 +241,16 @@ where
         */
     pub fn update(
         &self,
-        Z: Vec<<S as StateEstimator>::Measurement>,
+        mut Z: Vec<<S as StateEstimator>::Measurement>,
         filter_state: <S as StateEstimator>::Params,
     ) -> <S as StateEstimator>::Params {
-        let Zg: Vec<<S as StateEstimator>::Measurement> = Z
-            .into_iter()
-            .filter_map(|z| {
-                if self
-                    .state_filter
-                    .gate(&z, &filter_state, self.gate_size.powi(2))
-                {
-                    Some(z)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        Z.retain(|z| {
+            self.state_filter
+                .gate(z, &filter_state, self.gate_size.powi(2))
+        });
 
-        let beta = self.association_probabilities(&Zg, &filter_state);
-        let filter_state_update_mixture_components = self.conditional_update(&Zg, filter_state);
+        let beta = self.association_probabilities(&Z, &filter_state);
+        let filter_state_update_mixture_components = self.conditional_update(&Z, filter_state);
 
         let filter_state_update_reduced =
             self.reduce_mixture(&beta, &filter_state_update_mixture_components);
