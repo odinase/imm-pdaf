@@ -176,10 +176,15 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
 
     let PI = DMatrix::from_row_slice(2, 2, &[0.92, 0.08, 0.1, 0.9]);
 
-    let dynmod_cv = DynamicModel::CV{sigma_a: sigma_a_cv};
-    let measmod_cv = MeasurementModel::CartesianPosition{sigma_z};
+    let dynmod_cv = DynamicModel::CV {
+        sigma_a: sigma_a_cv,
+    };
+    let measmod_cv = MeasurementModel::CartesianPosition { sigma_z };
 
-    let dynmod_ct = DynamicModel::CT{sigma_a: sigma_a_ct, sigma_w};
+    let dynmod_ct = DynamicModel::CT {
+        sigma_a: sigma_a_ct,
+        sigma_w,
+    };
     let measmod_ct = measmod_cv.clone();
 
     let ekf_cv = ekf::EKF::init(dynmod_cv, measmod_cv);

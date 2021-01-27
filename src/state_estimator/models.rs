@@ -2,23 +2,23 @@ use nalgebra::{DMatrix, DVector, U2};
 
 #[derive(Debug, Clone)]
 pub enum DynamicModel {
-    CV{sigma_a: f64},
-    CT{sigma_a: f64, sigma_w: f64},
+    CV { sigma_a: f64 },
+    CT { sigma_a: f64, sigma_w: f64 },
 }
 
 #[derive(Debug, Clone)]
 pub enum MeasurementModel {
-    CartesianPosition{sigma_z: f64},
+    CartesianPosition { sigma_z: f64 },
 }
 
 impl MeasurementModel {
     pub fn cartesian_position(sigma_z: f64) -> Self {
-        Self::CartesianPosition{sigma_z}
+        Self::CartesianPosition { sigma_z }
     }
     /// Assumes p is the first state
     pub fn h(&self, x: &DVector<f64>) -> DVector<f64> {
         match self {
-            Self::CartesianPosition{sigma_z: _} => {
+            Self::CartesianPosition { sigma_z: _ } => {
                 let mut p = DVector::zeros(2);
                 p.copy_from(&x.rows(0, 2));
                 p
@@ -28,7 +28,7 @@ impl MeasurementModel {
 
     pub fn H(&self, x: &DVector<f64>) -> DMatrix<f64> {
         match self {
-            Self::CartesianPosition{sigma_z: _} => {
+            Self::CartesianPosition { sigma_z: _ } => {
                 let n = x.len();
                 let H = DMatrix::identity(2, n);
                 H
@@ -37,7 +37,7 @@ impl MeasurementModel {
     }
     pub fn R(&self, _x: &DVector<f64>, z: &DVector<f64>) -> DMatrix<f64> {
         match self {
-            Self::CartesianPosition{sigma_z} => {
+            Self::CartesianPosition { sigma_z } => {
                 let n = z.len();
                 let R = DMatrix::<f64>::identity(n, n) * sigma_z.powi(2);
                 R
@@ -48,16 +48,16 @@ impl MeasurementModel {
 
 impl DynamicModel {
     pub fn cv(sigma_a: f64) -> Self {
-        Self::CV{sigma_a}
+        Self::CV { sigma_a }
     }
 
     pub fn ct(sigma_a: f64, sigma_w: f64) -> Self {
-        Self::CT{sigma_a, sigma_w}
+        Self::CT { sigma_a, sigma_w }
     }
 
     pub fn f(&self, x: &DVector<f64>, ts: f64) -> DVector<f64> {
         match self {
-            Self::CV{sigma_a: _} => {
+            Self::CV { sigma_a: _ } => {
                 let n = x.len();
                 let mut x_next = DVector::zeros(n);
                 let p = x.fixed_rows::<U2>(0);
@@ -66,7 +66,10 @@ impl DynamicModel {
                 x_next.fixed_rows_mut::<U2>(2).copy_from(&(u));
                 x_next
             }
-            Self::CT{sigma_a: _, sigma_w: _} => {
+            Self::CT {
+                sigma_a: _,
+                sigma_w: _,
+            } => {
                 let x0 = x[0];
                 let y0 = x[1];
                 let u0 = x[2];
@@ -93,7 +96,7 @@ impl DynamicModel {
     }
     pub fn F(&self, x: &DVector<f64>, ts: f64) -> DMatrix<f64> {
         match self {
-            Self::CV{sigma_a: _} => {
+            Self::CV { sigma_a: _ } => {
                 let n = x.len();
                 let mut F = DMatrix::<f64>::identity(n, n);
                 F.slice_mut((0, 2), (2, 2))
@@ -104,7 +107,10 @@ impl DynamicModel {
                 }
                 F
             }
-            Self::CT{sigma_a: _, sigma_w: _} => {
+            Self::CT {
+                sigma_a: _,
+                sigma_w: _,
+            } => {
                 let u0 = x[2];
                 let v0 = x[3];
                 let omega = x[4];
@@ -156,7 +162,7 @@ impl DynamicModel {
     }
     pub fn Q(&self, x: &DVector<f64>, ts: f64) -> DMatrix<f64> {
         match self {
-            Self::CV{sigma_a} => {
+            Self::CV { sigma_a } => {
                 let n = x.len();
                 let mut Q = DMatrix::zeros(n, n);
                 Q.slice_mut((0, 0), (2, 2))
@@ -182,7 +188,7 @@ impl DynamicModel {
                 Q *= sigma_a.powi(2);
                 Q
             }
-            Self::CT{sigma_a, sigma_w} => {
+            Self::CT { sigma_a, sigma_w } => {
                 let mut Q = DMatrix::zeros(5, 5);
                 Q.slice_mut((0, 0), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
