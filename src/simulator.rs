@@ -140,12 +140,12 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
     let Xgt_numpy = context.globals(py).get_item("Xgt").unwrap();
 
     let Xgt: nalgebra::DMatrix<f64> = matrix_from_numpy(py, Xgt_numpy).unwrap();
-    let K: i32 = context
+    let K: usize = context
         .globals(py)
         .get_item("K")
         .unwrap()
         .extract::<f64>()
-        .unwrap() as i32;
+        .unwrap() as usize;
     let Ts: f64 = context
         .globals(py)
         .get_item("Ts")
@@ -154,7 +154,7 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     // Set up measurements
-    let mut Z = Vec::new();
+    let mut Z = Vec::with_capacity(K);
     for k in 0..K {
         python! {
             #![context = &context]
@@ -176,10 +176,10 @@ pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
 
     let PI = DMatrix::from_row_slice(2, 2, &[0.92, 0.08, 0.1, 0.9]);
 
-    let dynmod_cv = DynamicModel::CV(sigma_a_cv);
-    let measmod_cv = MeasurementModel::CartesianPosition(sigma_z);
+    let dynmod_cv = DynamicModel::CV{sigma_a: sigma_a_cv};
+    let measmod_cv = MeasurementModel::CartesianPosition{sigma_z};
 
-    let dynmod_ct = DynamicModel::CT(sigma_a_ct, sigma_w);
+    let dynmod_ct = DynamicModel::CT{sigma_a: sigma_a_ct, sigma_w};
     let measmod_ct = measmod_cv.clone();
 
     let ekf_cv = ekf::EKF::init(dynmod_cv, measmod_cv);
