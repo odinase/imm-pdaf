@@ -11,8 +11,6 @@ pub fn plot_states(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let native_options = eframe::NativeOptions::default();
 
-    let states = std::rc::Rc::new(states);
-    let Xgt = std::rc::Rc::new(Xgt);
     eframe::run_simple_native("My egui App", native_options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             let estimate_line = Line::new(
@@ -26,7 +24,7 @@ pub fn plot_states(
                 .legend(Legend::default())
                 .show(ui, |plot_ui| {
                     plot_ui.line(estimate_line);
-                    if let Some(Xgt) = &*Xgt {
+                    if let Some(Xgt) = &Xgt {
                         let gt_line =
                             Line::new(Xgt.as_slice().iter().map(|gt| [gt[0], gt[1]]).collect::<PlotPoints>())
                                 .name("Ground truth");

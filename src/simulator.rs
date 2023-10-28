@@ -19,7 +19,10 @@ use tokio::sync::mpsc::Sender;
 pub fn run_pdaf() -> anyhow::Result<()> {
     let pdaf_path = "json/data_for_pda.json";
 
+    println!("Reading data from file...");
+    let dataread_start = Instant::now();
     let timesteps = read_dataset_from_json(pdaf_path)?;
+    println!("Done! Spent {} s", dataread_start.elapsed().as_secs_f64());
     // We know that all Ts are equal for this dataset, use first Ts
     let Ts = timesteps[0].Ts;
 
@@ -66,6 +69,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
     let mut states = Vec::with_capacity(K);
     let mut Xgts = Vec::with_capacity(K);
 
+    println!("Starting simulation...");
     let start = Instant::now();
     for Timestep {
         Ts,
@@ -85,7 +89,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
         Xgts.push(DVector::from_vec(Xgt));
     }
     let duration = start.elapsed();
-    println!("Time elapsed in sim is: {:?}", duration);
+    println!("Done! Spent {} s in simulation", duration.as_secs_f64());
 
     println!("{}", ekfupd);
 
