@@ -261,6 +261,12 @@ pub fn run_joyride() -> anyhow::Result<()> {
     }
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
+    let x_start = states.first().unwrap().x[0];
+    let y_start = states.first().unwrap().x[1];
+    let x_end = states.last().unwrap().x[0];
+    let y_end = states.last().unwrap().x[1];
+    println!("{x_start}, {y_start} is start");
+    println!("{x_end}, {y_end} is end");
 
     plotting::plot_states("Joyride trajectory", states, Some(Xgts)).unwrap();
 

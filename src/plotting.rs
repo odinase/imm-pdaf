@@ -1,6 +1,6 @@
 use crate::state_estimator::ekf::GaussParams;
 use eframe::{egui, epaint::Color32};
-use egui_plot::{Legend, Line, Plot, PlotPoints};
+use egui_plot::{Legend, Line, MarkerShape, Plot, PlotPoints, Points};
 use nalgebra::DVector;
 use std::collections::VecDeque;
 
@@ -13,6 +13,23 @@ pub fn plot_states(
 
     eframe::run_simple_native(fig_name, native_options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
+            let x_start = states.first().unwrap().x[0];
+            let y_start = states.first().unwrap().x[1];
+            let x_end = states.last().unwrap().x[0];
+            let y_end = states.last().unwrap().x[1];
+            let start_point = Points::new([x_start, y_start])
+                .shape(MarkerShape::Diamond)
+                .color(Color32::RED)
+                .highlight(true)
+                .radius(5.0)
+                .name("Start");
+            let end_point = Points::new([x_end, y_end])
+                .shape(MarkerShape::Diamond)
+                .color(Color32::GREEN)
+                .highlight(true)
+                .radius(5.0)
+                .name("End");
+
             let estimate_line = Line::new(
                 states
                     .iter()
@@ -20,20 +37,27 @@ pub fn plot_states(
                     .collect::<PlotPoints>(),
             )
             .name("Estimate");
+            let gt_line = Xgt.as_ref().map(|Xgt| {
+                Line::new(
+                    Xgt.as_slice()
+                        .iter()
+                        .map(|gt| [gt[0], gt[1]])
+                        .collect::<PlotPoints>(),
+                )
+                .name("Ground truth")
+            });
+
             Plot::new("state_trajectory")
                 .legend(Legend::default())
+                .x_axis_label("East")
+                .y_axis_label("North")
                 .show(ui, |plot_ui| {
                     plot_ui.line(estimate_line);
-                    if let Some(Xgt) = &Xgt {
-                        let gt_line = Line::new(
-                            Xgt.as_slice()
-                                .iter()
-                                .map(|gt| [gt[0], gt[1]])
-                                .collect::<PlotPoints>(),
-                        )
-                        .name("Ground truth");
+                    if let Some(gt_line) = gt_line {
                         plot_ui.line(gt_line);
                     }
+                    plot_ui.points(start_point);
+                    plot_ui.points(end_point);
                 });
         });
     })?;
