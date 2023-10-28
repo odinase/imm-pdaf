@@ -498,14 +498,14 @@ mod tests {
         let x = DVector::from_row_slice(&[0., 0., 0., 0., 0.]);
         let P = DMatrix::from_diagonal(&DVector::from_row_slice(&[1., 1., 1., 1., 1.]));
 
-        let measmod = MeasurementModel::CartesianPosition(SIGMA_Z);
-        let dynmod_ct = DynamicModel::CT(SIGMA_A_CT, SIGMA_OMEGA);
-        let dynmod_cv = DynamicModel::CV(SIGMA_A_CV);
+        let measmod = MeasurementModel::CartesianPosition{sigma_z: SIGMA_Z};
+        let dynmod_ct = DynamicModel::CT{sigma_a: SIGMA_A_CT, sigma_w: SIGMA_OMEGA};
+        let dynmod_cv = DynamicModel::CV{sigma_a: SIGMA_A_CV};
 
         let ekf_cv = EKF::init(dynmod_cv, measmod);
 
         // Is probably moved, so make a new one
-        let measmod = MeasurementModel::CartesianPosition(SIGMA_Z);
+        let measmod = MeasurementModel::CartesianPosition{sigma_z: SIGMA_Z};
 
         let ekf_ct = EKF::init(dynmod_ct, measmod);
 
@@ -548,14 +548,14 @@ mod tests {
         let P = DMatrix::from_diagonal(&DVector::from_row_slice(&[1., 1., 1., 1., 1.]));
         let z = DVector::from_row_slice(&[2.46850281, 24.68253298]);
 
-        let measmod = MeasurementModel::CartesianPosition(SIGMA_Z);
-        let dynmod_ct = DynamicModel::CT(SIGMA_A_CT, SIGMA_OMEGA);
-        let dynmod_cv = DynamicModel::CV(SIGMA_A_CV);
+        let measmod = MeasurementModel::CartesianPosition{sigma_z: SIGMA_Z};
+        let dynmod_ct = DynamicModel::CT{sigma_a: SIGMA_A_CT, sigma_w: SIGMA_OMEGA};
+        let dynmod_cv = DynamicModel::CV{sigma_a: SIGMA_A_CV};
 
         let ekf_cv = EKF::init(dynmod_cv, measmod);
 
         // Is probably moved, so make a new one
-        let measmod = MeasurementModel::CartesianPosition(SIGMA_Z);
+        let measmod = MeasurementModel::CartesianPosition{sigma_z: SIGMA_Z};
 
         let ekf_ct = EKF::init(dynmod_ct, measmod);
 

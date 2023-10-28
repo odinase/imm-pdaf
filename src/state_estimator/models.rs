@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector, U2};
+use nalgebra::{DMatrix, DVector};
 
 #[derive(Debug, Clone)]
 pub enum DynamicModel {
@@ -60,10 +60,10 @@ impl DynamicModel {
             Self::CV { sigma_a: _ } => {
                 let n = x.len();
                 let mut x_next = DVector::zeros(n);
-                let p = x.fixed_rows::<U2>(0);
-                let u = x.fixed_rows::<U2>(2);
-                x_next.fixed_rows_mut::<U2>(0).copy_from(&(p + ts * u));
-                x_next.fixed_rows_mut::<U2>(2).copy_from(&(u));
+                let p = x.fixed_rows::<2>(0);
+                let u = x.fixed_rows::<2>(2);
+                x_next.fixed_rows_mut::<2>(0).copy_from(&(p + ts * u));
+                x_next.fixed_rows_mut::<2>(2).copy_from(&(u));
                 x_next
             }
             Self::CT {
