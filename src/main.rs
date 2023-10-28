@@ -2,5 +2,5 @@
 use imm_pdaf::simulator as sim;
 
 fn main() -> anyhow::Result<()> {
-    sim::run_pdaf()
+    sim::run_joyride()
 }

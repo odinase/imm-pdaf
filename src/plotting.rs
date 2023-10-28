@@ -1,17 +1,17 @@
 use crate::state_estimator::ekf::GaussParams;
-use nalgebra::DVector;
 use eframe::{egui, epaint::Color32};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
+use nalgebra::DVector;
 use std::collections::VecDeque;
 
-
 pub fn plot_states(
+    fig_name: &str,
     states: Vec<GaussParams>,
     Xgt: Option<Vec<DVector<f64>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let native_options = eframe::NativeOptions::default();
 
-    eframe::run_simple_native("My egui App", native_options, move |ctx, _frame| {
+    eframe::run_simple_native(fig_name, native_options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             let estimate_line = Line::new(
                 states
@@ -25,9 +25,13 @@ pub fn plot_states(
                 .show(ui, |plot_ui| {
                     plot_ui.line(estimate_line);
                     if let Some(Xgt) = &Xgt {
-                        let gt_line =
-                            Line::new(Xgt.as_slice().iter().map(|gt| [gt[0], gt[1]]).collect::<PlotPoints>())
-                                .name("Ground truth");
+                        let gt_line = Line::new(
+                            Xgt.as_slice()
+                                .iter()
+                                .map(|gt| [gt[0], gt[1]])
+                                .collect::<PlotPoints>(),
+                        )
+                        .name("Ground truth");
                         plot_ui.line(gt_line);
                     }
                 });

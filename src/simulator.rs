@@ -2,19 +2,17 @@ use crate::{
     data_parsing::{read_dataset_from_json, Timestep},
     mixture::MixtureParameters,
     pdaf::PDAF,
-    simulator as sim,
+    plotting, simulator as sim,
     state_estimator::{
         ekf, imm,
         models::{DynamicModel, MeasurementModel},
         StateEstimator,
     },
-    plotting
 };
 use itertools::Itertools as _;
 use nalgebra::{dvector, DMatrix, DVector};
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
-
 
 pub fn run_pdaf() -> anyhow::Result<()> {
     let pdaf_path = "json/data_for_pda.json";
@@ -71,13 +69,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
 
     println!("Starting simulation...");
     let start = Instant::now();
-    for Timestep {
-        Ts,
-        Z,
-        Xgt,
-        ..
-    } in timesteps
-    {
+    for Timestep { Ts, Z, Xgt, .. } in timesteps {
         let Z: Vec<_> = Z
             .into_iter()
             .tuples()
@@ -91,168 +83,189 @@ pub fn run_pdaf() -> anyhow::Result<()> {
     let duration = start.elapsed();
     println!("Done! Spent {} s in simulation", duration.as_secs_f64());
 
-    println!("{}", ekfupd);
-
-    plotting::plot_states(states, Some(Xgts)).unwrap();
+    plotting::plot_states("Simulated PDAF", states, Some(Xgts)).unwrap();
 
     Ok(())
 }
 
-// pub fn run_imm() -> Result<(), Box<dyn std::error::Error>> {
-//     let gil = pyo3::Python::acquire_gil();
-//     let py = gil.python();
-//     let context = Context::new_with_gil(py).unwrap();
+pub fn run_imm_pdaf() -> anyhow::Result<()> {
+    let imm_path = "json/data_for_imm_pda.json";
 
-//     python! {
-//         #![context = &context]
-//         from scipy.io import loadmat
-//         import numpy as np
+    println!("Reading data from file...");
+    let dataread_start = Instant::now();
+    let timesteps = read_dataset_from_json(imm_path)?;
+    println!("Done! Spent {} s", dataread_start.elapsed().as_secs_f64());
+    // We know that all Ts are equal for this dataset, use first Ts
+    let Ts = timesteps[0].Ts;
+    let K = timesteps.len();
 
-//         data_file_name = "data/data_for_imm_pda.mat"
-//         loaded_data = loadmat(data_file_name)
-//         K = loaded_data["K"].item()
-//         Ts = loaded_data["Ts"].item()
-//         Xgt = loaded_data["Xgt"]
-//         Z = [zk.T for zk in loaded_data["Z"].ravel()]
-//         true_association = loaded_data["a"].ravel()
-//     }
+    let sigma_z: f64 = 2.84;
+    let sigma_a_cv = 0.14;
+    let sigma_a_ct = 0.04;
+    let sigma_w = 0.01;
 
-//     let Xgt_numpy = context.globals(py).get_item("Xgt").unwrap();
+    let PI = DMatrix::from_row_slice(2, 2, &[0.92, 0.08, 0.1, 0.9]);
 
-//     let Xgt: nalgebra::DMatrix<f64> = matrix_from_numpy(py, Xgt_numpy).unwrap();
-//     let K: usize = context
-//         .globals(py)
-//         .get_item("K")
-//         .unwrap()
-//         .extract::<f64>()
-//         .unwrap() as usize;
-//     let Ts: f64 = context
-//         .globals(py)
-//         .get_item("Ts")
-//         .unwrap()
-//         .extract()
-//         .unwrap();
+    let dynmod_cv = DynamicModel::CV {
+        sigma_a: sigma_a_cv,
+    };
+    let measmod_cv = MeasurementModel::CartesianPosition { sigma_z };
 
-//     // Set up measurements
-//     let mut Z = Vec::with_capacity(K);
-//     for k in 0..K {
-//         python! {
-//             #![context = &context]
-//             zk = Z['k]
-//         }
-//         let zk = context.globals(py).get_item("zk").unwrap();
-//         let zk: DMatrix<f64> = matrix_from_numpy(py, zk).unwrap();
-//         Z.push(
-//             zk.row_iter()
-//                 .map(|z| z.clone_owned().transpose())
-//                 .collect::<Vec<_>>(),
-//         );
-//     }
+    let dynmod_ct = DynamicModel::CT {
+        sigma_a: sigma_a_ct,
+        sigma_w,
+    };
+    let measmod_ct = measmod_cv.clone();
 
-//     let sigma_z: f64 = 2.84;
-//     let sigma_a_cv = 0.14;
-//     let sigma_a_ct = 0.04;
-//     let sigma_w = 0.01;
+    let ekf_cv = ekf::EKF::init(dynmod_cv, measmod_cv);
+    let ekf_ct = ekf::EKF::init(dynmod_ct, measmod_ct);
 
-//     let PI = DMatrix::from_row_slice(2, 2, &[0.92, 0.08, 0.1, 0.9]);
+    let filters = vec![ekf_cv, ekf_ct];
 
-//     let dynmod_cv = DynamicModel::CV {
-//         sigma_a: sigma_a_cv,
-//     };
-//     let measmod_cv = MeasurementModel::CartesianPosition { sigma_z };
+    let imm_filter = imm::IMM::init(filters, PI);
 
-//     let dynmod_ct = DynamicModel::CT {
-//         sigma_a: sigma_a_ct,
-//         sigma_w,
-//     };
-//     let measmod_ct = measmod_cv.clone();
+    let x0 = DVector::from_row_slice(&[2.47, 24.7, 0., 0., 0.]);
 
-//     let ekf_cv = ekf::EKF::init(dynmod_cv, measmod_cv);
-//     let ekf_ct = ekf::EKF::init(dynmod_ct, measmod_ct);
+    let P0 = DMatrix::from_partial_diagonal(
+        5,
+        5,
+        &[
+            sigma_w * sigma_w,
+            sigma_w * sigma_w,
+            5.6 * 5.6,
+            5.6 * 5.6,
+            0.1 * 0.1,
+        ],
+    );
 
-//     let filters = vec![ekf_cv, ekf_ct];
+    let ekf_cv_init = ekf::GaussParams::new(x0, P0);
+    let ekf_ct_init = ekf_cv_init.clone();
 
-//     let imm_filter = imm::IMM::init(filters, PI);
+    let init_components = vec![ekf_cv_init, ekf_ct_init];
+    let init_weights = vec![0.9, 0.1];
 
-//     let x0 = DVector::from_row_slice(&[2.47, 24.7, 0., 0., 0.]);
+    let mut immstate_upd = MixtureParameters::new(init_weights, init_components);
 
-//     let P0 = DMatrix::from_row_slice(
-//         5,
-//         5,
-//         &[
-//             sigma_w * sigma_w,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             sigma_w * sigma_w,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             5.6 * 5.6,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             5.6 * 5.6,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             0.,
-//             0.1 * 0.1,
-//         ],
-//     );
+    let clutter_intensity = 1e-3;
+    let PD = 0.92;
+    let gate_size = 3.0;
 
-//     let ekf_cv_init = ekf::GaussParams::new(x0, P0);
-//     let ekf_ct_init = ekf_cv_init.clone();
+    let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
 
-//     let init_components = vec![ekf_cv_init, ekf_ct_init];
-//     let init_weights = vec![0.9, 0.1];
+    let mut states = Vec::with_capacity(K);
+    let mut Xgts = Vec::with_capacity(K);
 
-//     let mut immstate_upd = MixtureParameters::new(init_weights, init_components);
+    let start = Instant::now();
+    for Timestep { Ts, Z, Xgt, .. } in timesteps {
+        let Z: Vec<_> = Z
+            .into_iter()
+            .tuples()
+            .map(|(zx, zy)| dvector![zx, zy])
+            .collect();
+        let immstate_pred = tracker.predict(immstate_upd, Ts);
+        immstate_upd = tracker.update(Z, immstate_pred);
+        let estimate = tracker.estimate(immstate_upd.clone());
+        states.push(estimate);
+        Xgts.push(DVector::from_vec(Xgt));
+        
+    }
+    let duration = start.elapsed();
+    println!("Time elapsed in sim is: {:?}", duration);
 
-//     let clutter_intensity = 1e-3;
-//     let PD = 0.92;
-//     let gate_size = 3.0;
+    plotting::plot_states("Simulated IMM-PDAF", states, Some(Xgts)).unwrap();
 
-//     let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
-//     let mut state = Vec::with_capacity(K as usize);
+    Ok(())
+}
 
-//     let start = Instant::now();
-//     for z in Z.into_iter() {
-//         let immstate_pred = tracker.predict(immstate_upd, Ts);
-//         immstate_upd = tracker.update(z, immstate_pred);
-//         let estimate = tracker.estimate(immstate_upd.clone());
-//         state.push(estimate);
-//     }
-//     let duration = start.elapsed();
-//     println!("Time elapsed in sim is: {:?}", duration);
+pub fn run_joyride() -> anyhow::Result<()> {
+    let imm_path = "json/data_joyride.json";
 
-//     println!("{}", state.last().unwrap());
+    println!("Reading data from file...");
+    let dataread_start = Instant::now();
+    let timesteps = read_dataset_from_json(imm_path)?;
+    println!("Done! Spent {} s", dataread_start.elapsed().as_secs_f64());
+    // We know that all Ts are equal for this dataset, use first Ts
+    let Ts = timesteps[0].Ts;
+    let K = timesteps.len();
 
-//     plotting::plot_states(state.as_slice(), Some(&Xgt));
+    let sigma_z: f64 = 10.0;
+    let sigma_a_cv = 4.0;
+    let sigma_a_ct = 8.0;
+    let sigma_w = 0.25;
 
-//     Ok(())
-// }
+    let pi_matrix = DMatrix::from_row_slice(2, 2, &[0.92, 0.08, 0.1, 0.9]);
 
-// pub fn read_var_from_mat(mat_file: &MatFile, var_name: &str) -> Option<DMatrix<f64>> {
-//     if let Some(var_data) = mat_file.find_by_name(var_name) {
-//         let (r, c) = (var_data.size()[0], var_data.size()[1]);
-//         let arr = var_data.data();
-//         if let NumericData::Double { real: d, imag: _ } = arr {
-//             Some(DMatrix::from_vec(r, c, d.to_vec()))
-//         } else {
-//             None
-//         }
-//     } else {
-//         None
-//     }
-// }
+    let dynmod_cv = DynamicModel::CV {
+        sigma_a: sigma_a_cv,
+    };
+    let measmod_cv = MeasurementModel::CartesianPosition { sigma_z };
+
+    let dynmod_ct = DynamicModel::CT {
+        sigma_a: sigma_a_ct,
+        sigma_w,
+    };
+    let measmod_ct = measmod_cv.clone();
+
+    let ekf_cv = ekf::EKF::init(dynmod_cv, measmod_cv);
+    let ekf_ct = ekf::EKF::init(dynmod_ct, measmod_ct);
+
+    let filters = vec![ekf_cv, ekf_ct];
+
+    let imm_filter = imm::IMM::init(filters, pi_matrix);
+
+    let x0 = DVector::from_row_slice(&[7100.0, 3630.0, -6.0, -3.0, 0.0]);
+
+    use std::f64::consts::PI;
+    let P0 = 4.0*DMatrix::from_partial_diagonal(
+        5,
+        5,
+        &[
+            10.0 * 10.0,
+            10.0 * 10.0,
+            1.0,
+            1.0,
+            PI / 10.0 * PI / 10.0,
+        ],
+    );
+
+    let ekf_cv_init = ekf::GaussParams::new(x0, P0);
+    let ekf_ct_init = ekf_cv_init.clone();
+
+    let init_components = vec![ekf_cv_init, ekf_ct_init];
+    let init_weights = vec![0.9, 0.1];
+
+    let mut immstate_upd = MixtureParameters::new(init_weights, init_components);
+
+    let clutter_intensity = 5.006470e-06;
+    let PD = 0.95;
+    let gate_size = 3.0;
+
+    let tracker = PDAF::init(imm_filter, clutter_intensity, PD, gate_size);
+
+    let mut states = Vec::with_capacity(K);
+    let mut Xgts = Vec::with_capacity(K);
+
+    let start = Instant::now();
+    for Timestep { Ts, Z, Xgt, .. } in timesteps {
+        let Z: Vec<_> = Z
+            .into_iter()
+            .tuples()
+            .map(|(zx, zy)| dvector![zx, zy])
+            .collect();
+        let immstate_pred = tracker.predict(immstate_upd, Ts);
+        immstate_upd = tracker.update(Z, immstate_pred);
+        let estimate = tracker.estimate(immstate_upd.clone());
+        states.push(estimate);
+        Xgts.push(DVector::from_vec(Xgt));
+        
+    }
+    let duration = start.elapsed();
+    println!("Time elapsed in sim is: {:?}", duration);
+
+    plotting::plot_states("Joyride trajectory", states, Some(Xgts)).unwrap();
+
+    Ok(())
+}
 
 // pub fn run_ekf() -> Result<(), Box<dyn std::error::Error>> {
 //     let file = std::fs::File::open("data/data_for_ekf.mat")?;
