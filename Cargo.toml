@@ -15,6 +15,7 @@ serde_json = "1.0.107"
 anyhow = "1.0.75"
 eframe = "0.23.0"
 egui_plot = "0.23.0"
+tokio = { version = "1.33.0", features = ["full"] }
 
 [[bench]]
 name = "benchmarks"

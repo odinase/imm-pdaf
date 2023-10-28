@@ -8,10 +8,13 @@ use crate::{
         models::{DynamicModel, MeasurementModel},
         StateEstimator,
     },
+    plotting
 };
 use itertools::Itertools as _;
 use nalgebra::{dvector, DMatrix, DVector};
 use std::time::Instant;
+use tokio::sync::mpsc::Sender;
+
 
 pub fn run_pdaf() -> anyhow::Result<()> {
     let pdaf_path = "json/data_for_pda.json";
@@ -59,12 +62,15 @@ pub fn run_pdaf() -> anyhow::Result<()> {
 
     let tracker = PDAF::init(filter, clutter_intensity, PD, gate_size);
     let K = timesteps.len();
-    let mut state = Vec::with_capacity(K);
+
+    let mut states = Vec::with_capacity(K);
+    let mut Xgts = Vec::with_capacity(K);
 
     let start = Instant::now();
     for Timestep {
         Ts,
         Z,
+        Xgt,
         ..
     } in timesteps
     {
@@ -75,14 +81,15 @@ pub fn run_pdaf() -> anyhow::Result<()> {
             .collect();
         let ekfpred = tracker.predict(ekfupd, Ts);
         ekfupd = tracker.update(Z, ekfpred);
-        state.push(ekfupd.clone());
+        states.push(ekfupd.clone());
+        Xgts.push(DVector::from_vec(Xgt));
     }
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
 
     println!("{}", ekfupd);
 
-    // plotting::plot_states(state.as_slice(), Some(&Xgt));
+    plotting::plot_states(states, Some(Xgts)).unwrap();
 
     Ok(())
 }
