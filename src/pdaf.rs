@@ -1,5 +1,3 @@
-use argmax::Argmax;
-
 use super::mixture::ReduceMixture;
 use super::state_estimator::ekf::GaussParams;
 use super::state_estimator::StateEstimator;

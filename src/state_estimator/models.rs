@@ -99,7 +99,7 @@ impl DynamicModel {
             Self::CV { sigma_a: _ } => {
                 let n = x.len();
                 let mut F = DMatrix::<f64>::identity(n, n);
-                F.slice_mut((0, 2), (2, 2))
+                F.view_mut((0, 2), (2, 2))
                     .copy_from(&(DMatrix::identity(2, 2) * ts));
                 // In case of IMM, where F is 5 x 5
                 if n == 5 {
@@ -165,21 +165,21 @@ impl DynamicModel {
             Self::CV { sigma_a } => {
                 let n = x.len();
                 let mut Q = DMatrix::zeros(n, n);
-                Q.slice_mut((0, 0), (2, 2))
+                Q.view_mut((0, 0), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,
                         ts.powi(3) / 3.0,
                     ));
-                Q.slice_mut((2, 2), (2, 2))
+                Q.view_mut((2, 2), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(2, 2, ts));
-                Q.slice_mut((0, 2), (2, 2))
+                Q.view_mut((0, 2), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,
                         ts.powi(2) / 2.0,
                     ));
-                Q.slice_mut((2, 0), (2, 2))
+                Q.view_mut((2, 0), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,
@@ -190,21 +190,21 @@ impl DynamicModel {
             }
             Self::CT { sigma_a, sigma_w } => {
                 let mut Q = DMatrix::zeros(5, 5);
-                Q.slice_mut((0, 0), (2, 2))
+                Q.view_mut((0, 0), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,
                         ts.powi(3) / 3.0,
                     ));
-                Q.slice_mut((2, 2), (2, 2))
+                Q.view_mut((2, 2), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(2, 2, ts));
-                Q.slice_mut((0, 2), (2, 2))
+                Q.view_mut((0, 2), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,
                         ts.powi(2) / 2.0,
                     ));
-                Q.slice_mut((2, 0), (2, 2))
+                Q.view_mut((2, 0), (2, 2))
                     .copy_from(&DMatrix::<f64>::from_diagonal_element(
                         2,
                         2,

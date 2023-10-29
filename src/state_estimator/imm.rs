@@ -1,7 +1,7 @@
 use super::ekf::GaussParams;
 use crate::mixture::{MixtureParameters, ReduceMixture};
 use crate::state_estimator::StateEstimator;
-use nalgebra::{DMatrix, DMatrixSlice, DVector};
+use nalgebra::{DMatrix, DMatrixView, DVector};
 
 fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>) {
     /*
@@ -19,7 +19,7 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
     */
     let joint: DMatrix<f64> = {
         // Broadcast pr rowwise, ie, it repeats at each row for n rows
-        let P = DMatrixSlice::from_slice_with_strides(pr, m, n, 1, 0);
+        let P = DMatrixView::from_slice_with_strides(pr, m, n, 1, 0);
         cond_pr.component_mul(&P)
     };
     // marginal = [s1_k, ..., sN_k]'
@@ -31,7 +31,7 @@ fn discrete_bayes(pr: &[f64], cond_pr: &DMatrix<f64>) -> (Vec<f64>, DMatrix<f64>
     */
     let conditional = {
         // Broadcast pr rowwise, ie, it repeats at each row for n rows
-        let M = DMatrixSlice::from_slice_with_strides(marginal.as_slice(), m, n, 0, 1);
+        let M = DMatrixView::from_slice_with_strides(marginal.as_slice(), m, n, 0, 1);
         // May blow up, let's hope it doesn't
         joint.component_div(&M)
     };

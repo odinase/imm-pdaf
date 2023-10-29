@@ -1,7 +1,7 @@
 use super::models::{DynamicModel, MeasurementModel};
 use super::StateEstimator;
 use crate::consistency::Consistency;
-use crate::mixture::{gaussian_reduce_mixture, MixtureParameters, ReduceMixture};
+use crate::mixture::{gaussian_reduce_mixture, ReduceMixture};
 use nalgebra::{DMatrix, DVector};
 use std::f64::consts::TAU as _2_PI;
 

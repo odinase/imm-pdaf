@@ -2,17 +2,16 @@ use crate::{
     data_parsing::{read_dataset_from_json, Timestep},
     mixture::MixtureParameters,
     pdaf::PDAF,
-    visualization, simulator as sim,
+    visualization,
     state_estimator::{
         ekf, imm,
         models::{DynamicModel, MeasurementModel},
-        StateEstimator,
     },
 };
 use itertools::Itertools as _;
 use nalgebra::{dvector, DMatrix, DVector};
 use std::time::Instant;
-use tokio::sync::mpsc::Sender;
+
 
 pub fn run_pdaf() -> anyhow::Result<()> {
     let pdaf_path = "json/data_for_pda.json";
@@ -85,7 +84,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
     let duration = start.elapsed();
     println!("Done! Spent {} s in simulation", duration.as_secs_f64());
 
-    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
+    visualization::run("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }
@@ -98,7 +97,6 @@ pub fn run_imm_pdaf() -> anyhow::Result<()> {
     let timesteps = read_dataset_from_json(imm_path)?;
     println!("Done! Spent {} s", dataread_start.elapsed().as_secs_f64());
     // We know that all Ts are equal for this dataset, use first Ts
-    let Ts = timesteps[0].Ts;
     let K = timesteps.len();
 
     let sigma_z: f64 = 2.84;
@@ -176,7 +174,7 @@ pub fn run_imm_pdaf() -> anyhow::Result<()> {
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
 
-    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
+    visualization::run("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }
@@ -188,8 +186,6 @@ pub fn run_joyride() -> anyhow::Result<()> {
     let dataread_start = Instant::now();
     let timesteps = read_dataset_from_json(imm_path)?;
     println!("Done! Spent {} s", dataread_start.elapsed().as_secs_f64());
-    // We know that all Ts are equal for this dataset, use first Ts
-    let Ts = timesteps[0].Ts;
     let K = timesteps.len();
 
     let sigma_z: f64 = 10.0;
@@ -273,7 +269,7 @@ pub fn run_joyride() -> anyhow::Result<()> {
     println!("{x_start}, {y_start} is start");
     println!("{x_end}, {y_end} is end");
 
-    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
+    visualization::run("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }
