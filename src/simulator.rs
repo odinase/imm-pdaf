@@ -2,7 +2,7 @@ use crate::{
     data_parsing::{read_dataset_from_json, Timestep},
     mixture::MixtureParameters,
     pdaf::PDAF,
-    plotting, simulator as sim,
+    visualization, simulator as sim,
     state_estimator::{
         ekf, imm,
         models::{DynamicModel, MeasurementModel},
@@ -66,6 +66,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
 
     let mut states = Vec::with_capacity(K);
     let mut Xgts = Vec::with_capacity(K);
+    let mut Zs = Vec::with_capacity(K);
 
     println!("Starting simulation...");
     let start = Instant::now();
@@ -75,6 +76,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
             .tuples()
             .map(|(zx, zy)| dvector![zx, zy])
             .collect();
+        Zs.push(Z.clone());
         let ekfpred = tracker.predict(ekfupd, Ts);
         ekfupd = tracker.update(Z, ekfpred);
         states.push(ekfupd.clone());
@@ -83,7 +85,7 @@ pub fn run_pdaf() -> anyhow::Result<()> {
     let duration = start.elapsed();
     println!("Done! Spent {} s in simulation", duration.as_secs_f64());
 
-    plotting::plot_states("Simulated PDAF", states, Some(Xgts)).unwrap();
+    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }
@@ -154,6 +156,7 @@ pub fn run_imm_pdaf() -> anyhow::Result<()> {
 
     let mut states = Vec::with_capacity(K);
     let mut Xgts = Vec::with_capacity(K);
+    let mut Zs = Vec::with_capacity(K);
 
     let start = Instant::now();
     for Timestep { Ts, Z, Xgt, .. } in timesteps {
@@ -162,6 +165,7 @@ pub fn run_imm_pdaf() -> anyhow::Result<()> {
             .tuples()
             .map(|(zx, zy)| dvector![zx, zy])
             .collect();
+        Zs.push(Z.clone());
         let immstate_pred = tracker.predict(immstate_upd, Ts);
         immstate_upd = tracker.update(Z, immstate_pred);
         let estimate = tracker.estimate(immstate_upd.clone());
@@ -172,7 +176,7 @@ pub fn run_imm_pdaf() -> anyhow::Result<()> {
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
 
-    plotting::plot_states("Simulated IMM-PDAF", states, Some(Xgts)).unwrap();
+    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }
@@ -244,6 +248,7 @@ pub fn run_joyride() -> anyhow::Result<()> {
 
     let mut states = Vec::with_capacity(K);
     let mut Xgts = Vec::with_capacity(K);
+    let mut Zs = Vec::with_capacity(K);
 
     let start = Instant::now();
     for Timestep { Ts, Z, Xgt, .. } in timesteps {
@@ -252,12 +257,12 @@ pub fn run_joyride() -> anyhow::Result<()> {
             .tuples()
             .map(|(zx, zy)| dvector![zx, zy])
             .collect();
+        Zs.push(Z.clone());
         let immstate_pred = tracker.predict(immstate_upd, Ts);
         immstate_upd = tracker.update(Z, immstate_pred);
         let estimate = tracker.estimate(immstate_upd.clone());
         states.push(estimate);
         Xgts.push(DVector::from_vec(Xgt));
-        
     }
     let duration = start.elapsed();
     println!("Time elapsed in sim is: {:?}", duration);
@@ -268,7 +273,7 @@ pub fn run_joyride() -> anyhow::Result<()> {
     println!("{x_start}, {y_start} is start");
     println!("{x_end}, {y_end} is end");
 
-    plotting::plot_states("Joyride trajectory", states, Some(Xgts)).unwrap();
+    visualization::plot_states("Joyride trajectory", states, Zs, Some(Xgts)).unwrap();
 
     Ok(())
 }

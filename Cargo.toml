@@ -16,6 +16,7 @@ anyhow = "1.0.75"
 eframe = "0.23.0"
 egui_plot = "0.23.0"
 tokio = { version = "1.33.0", features = ["full"] }
+argmax = { git = "https://github.com/odinase/argmax.git" }
 
 [[bench]]
 name = "benchmarks"

@@ -1,3 +1,5 @@
+use argmax::Argmax;
+
 use super::mixture::ReduceMixture;
 use super::state_estimator::ekf::GaussParams;
 use super::state_estimator::StateEstimator;
@@ -173,7 +175,9 @@ where
         filter_state: &<S as StateEstimator>::Params,
     ) -> Vec<f64> {
         let lls = self.loglikelihood_ratios(Z, filter_state);
-        let logsumexp = lls.iter().map(|l| l.exp()).sum::<f64>().ln();
+        use argmax::Argmax as _;
+        let (_, &l_max) = lls.iter().argmax().expect("empty list of likelihoods, should not be possible");
+        let logsumexp = l_max + lls.iter().map(|l| (l - l_max).exp()).sum::<f64>().ln();
         let beta = lls.iter().map(|l| (l - logsumexp).exp()).collect();
         beta
     }
